@@ -1,9 +1,11 @@
+'use client';
+
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Wallet, Menu, X, Sparkles, LayoutDashboard, History, ScanLine, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
 
 interface NavbarProps {
   isConnected: boolean;
@@ -13,7 +15,7 @@ interface NavbarProps {
 
 export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const location = useLocation();
+  const pathname = usePathname();
 
   const navLinks = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -24,14 +26,12 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
 
   return (
     <>
-      <motion.nav 
-        initial={{ y: -100 }}
-        animate={{ y: 0 }}
-        className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-6xl rounded-full border border-white/40 bg-white/70 backdrop-blur-xl shadow-lg shadow-indigo-900/5 transition-all duration-300"
+      <nav 
+        className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-6xl rounded-full border border-white/40 bg-white/70 backdrop-blur-xl shadow-lg shadow-indigo-900/5 transition-all duration-300 animate-in slide-in-from-top"
       >
         <div className="px-6 h-16 flex items-center justify-between">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-3 group">
+          <Link href="/" className="flex items-center space-x-3 group">
             <div className="relative w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center overflow-hidden shadow-lg shadow-slate-900/20 group-hover:scale-105 transition-transform">
               <Sparkles className="w-5 h-5 text-white" />
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:animate-[shimmer_1.5s_infinite]" />
@@ -42,20 +42,16 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-1 bg-slate-100/50 p-1 rounded-full border border-slate-200/50">
             {isConnected && navLinks.map((link) => {
-              const isActive = location.pathname === link.path;
+              const isActive = pathname === link.path;
               return (
                 <Link
                   key={link.path}
-                  to={link.path}
-                  className="relative px-5 py-2 rounded-full text-sm font-medium transition-all"
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="nav-pill"
-                      className="absolute inset-0 bg-white shadow-sm rounded-full border border-black/5"
-                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                    />
+                  href={link.path}
+                  className={cn(
+                    "relative px-5 py-2 rounded-full text-sm font-medium transition-all",
+                    isActive && "bg-white shadow-sm border border-black/5"
                   )}
+                >
                   <span className={cn(
                     "relative z-10 flex items-center gap-2 transition-colors",
                     isActive ? "text-indigo-600 font-semibold" : "text-slate-500 hover:text-slate-900"
@@ -101,45 +97,38 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
             {isMobileMenuOpen ? <X /> : <Menu />}
           </button>
         </div>
-      </motion.nav>
+      </nav>
 
       {/* Mobile Menu */}
-      <AnimatePresence>
-        {isMobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-24 left-4 right-4 z-40 p-4 rounded-3xl border border-white/20 bg-white/90 backdrop-blur-2xl shadow-2xl"
-          >
-            <div className="space-y-2">
-              {isConnected && navLinks.map((link) => (
-                <Link
-                  key={link.path}
-                  to={link.path}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center gap-3 text-sm font-medium p-4 rounded-2xl hover:bg-slate-100 transition-colors text-slate-600 hover:text-slate-900"
-                >
-                  <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
-                    <link.icon className="w-5 h-5" />
-                  </div>
-                  {link.name}
-                </Link>
-              ))}
-              <Button 
-                className="w-full h-12 rounded-xl text-lg mt-4" 
-                variant={isConnected ? "outline" : "premium"}
-                onClick={() => {
-                  onConnect();
-                  setIsMobileMenuOpen(false);
-                }}
+      {isMobileMenuOpen && (
+        <div className="fixed top-24 left-4 right-4 z-40 p-4 rounded-3xl border border-white/20 bg-white/90 backdrop-blur-2xl shadow-2xl animate-in fade-in slide-in-from-top duration-200">
+          <div className="space-y-2">
+            {isConnected && navLinks.map((link) => (
+              <Link
+                key={link.path}
+                href={link.path}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex items-center gap-3 text-sm font-medium p-4 rounded-2xl hover:bg-slate-100 transition-colors text-slate-600 hover:text-slate-900"
               >
-                {isConnected ? "Disconnect" : "Connect Wallet"}
-              </Button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+                  <link.icon className="w-5 h-5" />
+                </div>
+                {link.name}
+              </Link>
+            ))}
+            <Button 
+              className="w-full h-12 rounded-xl text-lg mt-4" 
+              variant={isConnected ? "outline" : "premium"}
+              onClick={() => {
+                onConnect();
+                setIsMobileMenuOpen(false);
+              }}
+            >
+              {isConnected ? "Disconnect" : "Connect Wallet"}
+            </Button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
