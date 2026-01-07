@@ -18,10 +18,10 @@ export async function GET(request: NextRequest) {
       const [metrics] = await db
         .select({
           totalConsolidations: sql<number>`COUNT(*)`,
-          completedConsolidations: sql<number>`COUNT(CASE WHEN status = 'completed' THEN 1 END)`,
+          completedConsolidations: sql<number>`COUNT(CASE WHEN status = 'CONFIRMED' THEN 1 END)`,
           uniqueUsers: sql<number>`COUNT(DISTINCT user_id)`,
-          totalGasSaved: sql<string>`COALESCE(SUM(CAST(actual_gas_usd AS DECIMAL)), 0)`,
-          totalValue: sql<string>`COALESCE(SUM(CAST(output_amount AS DECIMAL)), 0)`,
+          totalGasSaved: sql<string>`COALESCE(SUM(CAST(gas_sponsored_usd AS DECIMAL)), 0)`,
+          totalValue: sql<string>`COALESCE(SUM(CAST(actual_output AS DECIMAL)), 0)`,
         })
         .from(consolidationRequests);
 
@@ -30,8 +30,8 @@ export async function GET(request: NextRequest) {
         .select({
           date: consolidationAnalytics.date,
           consolidations: consolidationAnalytics.totalConsolidations,
-          volumeUsd: consolidationAnalytics.volumeUsd,
-          gasSavedUsd: consolidationAnalytics.gasSavedUsd,
+          volumeUsd: consolidationAnalytics.totalOutputValueUsd,
+          gasSavedUsd: consolidationAnalytics.totalGasSavedUsd,
         })
         .from(consolidationAnalytics)
         .orderBy(desc(consolidationAnalytics.date))
@@ -40,10 +40,10 @@ export async function GET(request: NextRequest) {
       // Calculate Base TVL (total value on Base chain)
       const [baseTvl] = await db
         .select({
-          tvl: sql<string>`COALESCE(SUM(CAST(output_amount AS DECIMAL)), 0)`,
+          tvl: sql<string>`COALESCE(SUM(CAST(actual_output AS DECIMAL)), 0)`,
         })
         .from(consolidationRequests)
-        .where(sql`8453 = ANY(chain_ids)`); // Base chain ID
+        .where(sql`output_chain_id = 8453`); // Base chain ID
 
       // Recent activity
       const recentActivity = await db
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
             id: activity.id,
             user: activity.userId,
             status: activity.status,
-            tokenCount: Array.isArray(activity.tokensIn) ? activity.tokensIn.length : 0,
+            tokenCount: Array.isArray(activity.inputTokens) ? activity.inputTokens.length : 0,
             createdAt: activity.createdAt,
           })),
         },
