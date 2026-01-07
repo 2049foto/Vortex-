@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
-import { Dashboard } from '../../src/pages/dashboard';
+import { Dashboard } from '../../src/ui-components/dashboard';
 import { getUserHistory } from '../../src/lib/api';
 
 export default function DashboardPage() {

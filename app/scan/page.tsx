@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import { useAccount } from 'wagmi';
-import { Scan } from '../../src/pages/scan';
+import { Scan } from '../../src/ui-components/scan';
 import { scanWallet } from '../../src/lib/api';
 
 export default function ScanPage() {
