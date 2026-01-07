@@ -207,7 +207,6 @@ export async function executeConsolidation(
   logger.info({ planId, walletAddress }, 'Executing consolidation');
 
   // Get or create user first
-  const { users } = await import('../db/schema');
   let [user] = await db
     .select()
     .from(users)
