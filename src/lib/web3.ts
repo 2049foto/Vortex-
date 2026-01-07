@@ -1,67 +1,100 @@
 /**
  * Vortex Protocol - Web3 Configuration
- * Wagmi v3 + Viem v2 + Reown AppKit v6
+ * Wagmi v3 + Viem v2 + Multi-chain support (10 EVM + Solana)
  */
 
 import { createConfig, http } from 'wagmi';
-import { base, mainnet, arbitrum, optimism, polygon } from 'wagmi/chains';
-import { coinbaseWallet, walletConnect } from 'wagmi/connectors';
-
-// Custom chains can be added here
-export const supportedChains = [
-  base, // Base - Primary chain
-  mainnet,
-  arbitrum,
-  optimism,
+import { 
+  base, 
+  mainnet, 
+  arbitrum, 
+  optimism, 
   polygon,
+  bsc,
+  avalanche,
+  zkSync,
+} from 'wagmi/chains';
+import { coinbaseWallet, walletConnect, injected } from 'wagmi/connectors';
+
+// Custom Monad chain (not in wagmi/chains yet)
+const monad = {
+  id: 838592,
+  name: 'Monad',
+  nativeCurrency: { name: 'Monad', symbol: 'MONAD', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://rpc.monad.xyz'] },
+  },
+  blockExplorers: {
+    default: { name: 'Monad Explorer', url: 'https://monad.xyz/explorer' },
+  },
+} as const;
+
+// All 10 EVM chains supported (Solana handled separately)
+export const supportedChains = [
+  base,       // Primary chain
+  mainnet,    // Ethereum
+  arbitrum,   // Arbitrum
+  optimism,   // Optimism
+  polygon,    // Polygon
+  bsc,        // BNB Chain
+  avalanche,  // Avalanche
+  zkSync,     // zkSync Era
+  monad,      // Monad
 ] as const;
 
 // Connectors - only initialize on client
 const getConnectors = () => {
+  const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '69915bbd15f146b792917c4f1a657139';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://dust-sweeper-yrjq.vercel.app';
+  
   // Skip WalletConnect on server to avoid indexedDB error
   if (typeof window === 'undefined') {
     return [
       coinbaseWallet({
         appName: 'Vortex Protocol',
-        appLogoUrl: `${process.env.NEXT_PUBLIC_APP_URL || ''}/logo.png`,
-        preference: {
-          options: 'smartWalletOnly', // Force Smart Wallet
-        },
+        appLogoUrl: `${appUrl}/logo.png`,
       }),
     ];
   }
 
   return [
+    // MetaMask and other injected wallets
+    injected({
+      shimDisconnect: true,
+    }),
+    // Coinbase Wallet (supports Smart Wallet)
     coinbaseWallet({
       appName: 'Vortex Protocol',
-      appLogoUrl: `${process.env.NEXT_PUBLIC_APP_URL || ''}/logo.png`,
-      preference: {
-        options: 'smartWalletOnly', // Force Smart Wallet
-      },
+      appLogoUrl: `${appUrl}/logo.png`,
     }),
+    // WalletConnect for mobile wallets
     walletConnect({
-      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'default-project-id',
+      projectId,
       metadata: {
         name: 'Vortex Protocol',
-        description: 'Premium Portfolio Hygiene Engine',
-        url: typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
-        icons: [`${typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || '')}/logo.png`],
+        description: 'Premium Portfolio Hygiene Engine - Gasless consolidator for Base',
+        url: appUrl,
+        icons: [`${appUrl}/logo.png`],
       },
       showQrModal: true,
     }),
   ];
 };
 
-// Wagmi configuration
+// Wagmi configuration with all 10 EVM chains
 export const wagmiConfig = createConfig({
   chains: supportedChains,
   connectors: getConnectors(),
   transports: {
-    [base.id]: http(process.env.NEXT_PUBLIC_BASE_RPC_URL || 'https://mainnet.base.org'),
-    [mainnet.id]: http(process.env.NEXT_PUBLIC_MAINNET_RPC_URL || 'https://eth.llamarpc.com'),
-    [arbitrum.id]: http(process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL || 'https://arb1.arbitrum.io/rpc'),
-    [optimism.id]: http(process.env.NEXT_PUBLIC_OPTIMISM_RPC_URL || 'https://mainnet.optimism.io'),
-    [polygon.id]: http(process.env.NEXT_PUBLIC_POLYGON_RPC_URL || 'https://polygon-rpc.com'),
+    [base.id]: http(process.env.NEXT_PUBLIC_QUICKNODE_BASE_HTTPS || 'https://mainnet.base.org'),
+    [mainnet.id]: http('https://eth.llamarpc.com'),
+    [arbitrum.id]: http('https://arb1.arbitrum.io/rpc'),
+    [optimism.id]: http('https://mainnet.optimism.io'),
+    [polygon.id]: http('https://polygon-rpc.com'),
+    [bsc.id]: http('https://bsc-dataseed.binance.org'),
+    [avalanche.id]: http('https://api.avax.network/ext/bc/C/rpc'),
+    [zkSync.id]: http('https://mainnet.era.zksync.io'),
+    [monad.id]: http('https://rpc.monad.xyz'),
   },
   ssr: true,
 });
