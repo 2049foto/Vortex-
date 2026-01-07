@@ -26,7 +26,6 @@ function getViemChain(chainId: number): Chain {
   return {
     id: chainId,
     name: config.name,
-    network: config.name.toLowerCase().replace(' ', '-'),
     nativeCurrency: {
       name: config.nativeToken,
       symbol: config.nativeToken,
@@ -39,7 +38,7 @@ function getViemChain(chainId: number): Chain {
     blockExplorers: {
       default: { name: 'Explorer', url: config.blockExplorer },
     },
-  };
+  } as Chain;
 }
 
 /**
