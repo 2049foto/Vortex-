@@ -1,0 +1,369 @@
+/**
+ * Vortex Protocol - Consolidation Service
+ * Multi-router swap aggregation and execution
+ */
+
+import { createLogger } from '../utils/logger';
+import type { TokenHolding } from './portfolioService';
+import type { RiskScore } from './riskScoringService';
+import * as oneInch from '../blockchain/routers/oneInch';
+import * as uniswapV4 from '../blockchain/routers/uniswapV4';
+import * as curve from '../blockchain/routers/curve';
+import * as balancer from '../blockchain/routers/balancer';
+import { simulateTransaction } from '../blockchain/tenderly';
+import { sponsorWithFallback } from '../blockchain/coinbase';
+import { sendUserOp, getUserOpReceipt } from '../blockchain/pimlico';
+import { db } from '../db/client';
+import { consolidationRequests, consolidationAnalytics } from '../db/schema';
+import { eq } from 'drizzle-orm';
+
+const logger = createLogger('consolidation');
+
+export interface ConsolidationPlan {
+  id: string;
+  tokens: Array<{
+    token: TokenHolding;
+    risk: RiskScore;
+    action: 'swap' | 'skip';
+    reason?: string;
+  }>;
+  swaps: SwapRoute[];
+  estimatedGasSaved: string;
+  estimatedOutput: string;
+  estimatedTime: number; // seconds
+}
+
+export interface SwapRoute {
+  router: '1inch' | 'uniswap_v4' | 'curve' | 'balancer';
+  fromToken: TokenHolding;
+  toToken: string; // Base chain target token
+  amountIn: string;
+  expectedOut: string;
+  estimatedGas: string;
+  priceImpact: number;
+  tx?: {
+    to: string;
+    data: string;
+    value: string;
+  };
+}
+
+/**
+ * Create consolidation plan
+ */
+export async function createConsolidationPlan(
+  walletAddress: string,
+  tokens: TokenHolding[],
+  riskScores: Map<string, RiskScore>,
+  targetToken: string = '0x4200000000000000000000000000000000000006' // WETH on Base
+): Promise<ConsolidationPlan> {
+  logger.info({ walletAddress, tokenCount: tokens.length }, 'Creating consolidation plan');
+
+  const plan: ConsolidationPlan = {
+    id: crypto.randomUUID(),
+    tokens: [],
+    swaps: [],
+    estimatedGasSaved: '0',
+    estimatedOutput: '0',
+    estimatedTime: 0,
+  };
+
+  // Filter tokens to consolidate
+  for (const token of tokens) {
+    const riskKey = `${token.chainId}:${token.address}`;
+    const risk = riskScores.get(riskKey);
+
+    if (!risk) {
+      plan.tokens.push({ token, risk: {} as RiskScore, action: 'skip', reason: 'No risk data' });
+      continue;
+    }
+
+    // Skip high-risk tokens
+    if (risk.tier === 'RISK') {
+      plan.tokens.push({ token, risk, action: 'skip', reason: 'High risk token' });
+      continue;
+    }
+
+    // Skip native tokens (keep some ETH for gas)
+    if (token.address === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE') {
+      plan.tokens.push({ token, risk, action: 'skip', reason: 'Native token (keep for gas)' });
+      continue;
+    }
+
+    // Skip if value too low (not worth gas)
+    if (token.valueUsd < 0.5) {
+      plan.tokens.push({ token, risk, action: 'skip', reason: 'Value too low for gas cost' });
+      continue;
+    }
+
+    // Add to consolidation
+    plan.tokens.push({ token, risk, action: 'swap' });
+  }
+
+  // Get swap routes for each token
+  const swapTokens = plan.tokens.filter((t) => t.action === 'swap');
+  
+  for (const { token } of swapTokens) {
+    try {
+      const route = await findBestRoute(token, targetToken, walletAddress);
+      if (route) {
+        plan.swaps.push(route);
+        plan.estimatedOutput = (
+          parseFloat(plan.estimatedOutput) + parseFloat(route.expectedOut)
+        ).toString();
+        plan.estimatedGasSaved = (
+          parseFloat(plan.estimatedGasSaved) + parseFloat(route.estimatedGas)
+        ).toString();
+      }
+    } catch (error) {
+      logger.error({ error, token: token.address }, 'Failed to find route');
+    }
+  }
+
+  // Estimate total time (assuming sequential execution)
+  plan.estimatedTime = plan.swaps.length * 15; // 15 seconds per swap
+
+  logger.info(
+    {
+      planId: plan.id,
+      swapCount: plan.swaps.length,
+      estimatedOutput: plan.estimatedOutput,
+    },
+    'Consolidation plan created'
+  );
+
+  return plan;
+}
+
+/**
+ * Find best swap route across multiple routers
+ */
+async function findBestRoute(
+  fromToken: TokenHolding,
+  toToken: string,
+  walletAddress: string
+): Promise<SwapRoute | null> {
+  const chainId = fromToken.chainId;
+  const amountIn = fromToken.balance;
+
+  logger.debug(
+    { fromToken: fromToken.address, toToken, chainId },
+    'Finding best route'
+  );
+
+  // Get quotes from all routers in parallel
+  const quotes = await Promise.allSettled([
+    oneInch.getQuote({
+      chainId,
+      fromToken: fromToken.address,
+      toToken,
+      amount: amountIn,
+      fromAddress: walletAddress,
+    }),
+    // uniswapV4.getQuote({ chainId, fromToken: fromToken.address, toToken, amount: amountIn }),
+    // curve.getQuote({ chainId, fromToken: fromToken.address, toToken, amount: amountIn }),
+    // balancer.getQuote({ chainId, fromToken: fromToken.address, toToken, amount: amountIn }),
+  ]);
+
+  // Find best quote (highest output, lowest gas)
+  let bestQuote: SwapRoute | null = null;
+  let bestScore = 0;
+
+  quotes.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      const quote = result.value;
+      const outputValue = parseFloat(quote.amountOut);
+      const gasValue = parseFloat(quote.estimatedGas);
+      
+      // Score = output / (gas * 0.01) - simple heuristic
+      const score = outputValue / (gasValue * 0.01);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestQuote = {
+          router: quote.router as any,
+          fromToken,
+          toToken,
+          amountIn,
+          expectedOut: quote.amountOut,
+          estimatedGas: quote.estimatedGas,
+          priceImpact: quote.priceImpact,
+        };
+      }
+    }
+  });
+
+  return bestQuote;
+}
+
+/**
+ * Execute consolidation plan
+ */
+export async function executeConsolidation(
+  planId: string,
+  walletAddress: string,
+  plan: ConsolidationPlan
+): Promise<{ requestId: string; status: 'pending' | 'success' | 'failed' }> {
+  logger.info({ planId, walletAddress }, 'Executing consolidation');
+
+  // Create DB record
+  const [request] = await db
+    .insert(consolidationRequests)
+    .values({
+      id: planId,
+      userId: walletAddress,
+      status: 'pending',
+      tokensIn: plan.swaps.map((s) => s.fromToken.address),
+      tokenOut: plan.swaps[0]?.toToken || '',
+      chainIds: plan.swaps.map((s) => s.fromToken.chainId),
+      estimatedGasUsd: '0', // TODO: Calculate
+      actualGasUsd: null,
+      outputAmount: null,
+      errorMessage: null,
+    })
+    .returning();
+
+  // Execute swaps sequentially
+  try {
+    for (const swap of plan.swaps) {
+      await executeSwap(swap, walletAddress);
+    }
+
+    // Update to success
+    await db
+      .update(consolidationRequests)
+      .set({ status: 'completed', outputAmount: plan.estimatedOutput })
+      .where(eq(consolidationRequests.id, planId));
+
+    // Update analytics
+    await updateAnalytics(plan, walletAddress);
+
+    return { requestId: planId, status: 'success' };
+  } catch (error) {
+    logger.error({ error, planId }, 'Consolidation execution failed');
+
+    // Update to failed
+    await db
+      .update(consolidationRequests)
+      .set({ 
+        status: 'failed',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      })
+      .where(eq(consolidationRequests.id, planId));
+
+    return { requestId: planId, status: 'failed' };
+  }
+}
+
+/**
+ * Execute single swap
+ */
+async function executeSwap(swap: SwapRoute, walletAddress: string): Promise<void> {
+  logger.info(
+    { router: swap.router, fromToken: swap.fromToken.address },
+    'Executing swap'
+  );
+
+  // Get swap transaction
+  let swapTx: any;
+  
+  if (swap.router === '1inch') {
+    swapTx = await oneInch.getSwapTx({
+      chainId: swap.fromToken.chainId,
+      fromToken: swap.fromToken.address,
+      toToken: swap.toToken,
+      amount: swap.amountIn,
+      fromAddress: walletAddress,
+      slippage: 0.5,
+    });
+  }
+
+  if (!swapTx?.tx) {
+    throw new Error('Failed to get swap transaction');
+  }
+
+  // Simulate on Tenderly
+  const simulation = await simulateTransaction({
+    chainId: swap.fromToken.chainId,
+    from: walletAddress,
+    to: swapTx.tx.to,
+    data: swapTx.tx.data,
+    value: swapTx.tx.value,
+  });
+
+  if (!simulation.success) {
+    throw new Error(`Simulation failed: ${simulation.errorMessage}`);
+  }
+
+  // Build UserOperation
+  const userOp = {
+    sender: walletAddress,
+    nonce: '0', // TODO: Get actual nonce
+    initCode: '0x',
+    callData: swapTx.tx.data,
+    callGasLimit: simulation.gasUsed,
+    verificationGasLimit: '100000',
+    preVerificationGas: '21000',
+    maxFeePerGas: '1000000000',
+    maxPriorityFeePerGas: '1000000000',
+    paymasterAndData: '0x',
+    signature: '0x',
+  };
+
+  // Sponsor with paymaster
+  const { result: sponsorData, paymaster } = await sponsorWithFallback(userOp);
+  
+  userOp.paymasterAndData = sponsorData.paymasterAndData;
+  userOp.callGasLimit = sponsorData.callGasLimit;
+
+  logger.info({ paymaster }, 'UserOp sponsored');
+
+  // Send to bundler
+  const userOpHash = await sendUserOp(userOp as any);
+
+  // Wait for receipt
+  let receipt = null;
+  let attempts = 0;
+  while (!receipt && attempts < 30) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    receipt = await getUserOpReceipt(userOpHash);
+    attempts++;
+  }
+
+  if (!receipt || !receipt.success) {
+    throw new Error('UserOp execution failed');
+  }
+
+  logger.info({ userOpHash, txHash: receipt.receipt.transactionHash }, 'Swap executed');
+}
+
+/**
+ * Update analytics
+ */
+async function updateAnalytics(plan: ConsolidationPlan, walletAddress: string): Promise<void> {
+  const valueConsolidated = plan.tokens
+    .filter((t) => t.action === 'swap')
+    .reduce((sum, t) => sum + t.token.valueUsd, 0);
+
+  await db.insert(consolidationAnalytics).values({
+    date: new Date().toISOString().split('T')[0],
+    totalConsolidations: 1,
+    uniqueUsers: 1,
+    volumeUsd: valueConsolidated.toString(),
+    gasSavedUsd: '0', // TODO: Calculate
+    baseTvl: valueConsolidated.toString(),
+  });
+}
+
+/**
+ * Get consolidation status
+ */
+export async function getConsolidationStatus(requestId: string) {
+  const [request] = await db
+    .select()
+    .from(consolidationRequests)
+    .where(eq(consolidationRequests.id, requestId));
+
+  return request || null;
+}
+

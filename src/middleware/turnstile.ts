@@ -1,0 +1,79 @@
+/**
+ * Vortex Protocol - Cloudflare Turnstile Middleware
+ * Bot protection for public endpoints
+ */
+
+import { env } from '../config/env';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('turnstile');
+
+interface TurnstileResponse {
+  success: boolean;
+  'error-codes'?: string[];
+  challenge_ts?: string;
+  hostname?: string;
+}
+
+/**
+ * Verify Cloudflare Turnstile token
+ */
+export async function verifyTurnstileToken(
+  token: string,
+  remoteIp?: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!token) {
+    return { success: false, error: 'Turnstile token is required' };
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append('secret', env.TURNSTILE_SECRET_KEY);
+    formData.append('response', token);
+    if (remoteIp) {
+      formData.append('remoteip', remoteIp);
+    }
+
+    const response = await fetch(
+      'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+      {
+        method: 'POST',
+        body: formData,
+      }
+    );
+
+    const data = (await response.json()) as TurnstileResponse;
+
+    if (!data.success) {
+      logger.warn(
+        { errorCodes: data['error-codes'] },
+        'Turnstile verification failed'
+      );
+      return {
+        success: false,
+        error: 'Bot verification failed. Please try again.',
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    logger.error({ error }, 'Turnstile verification error');
+    // Fail open in case of Turnstile service issues
+    return { success: true };
+  }
+}
+
+/**
+ * Turnstile middleware for protected endpoints
+ */
+export async function requireTurnstile(
+  token: string,
+  remoteIp?: string
+): Promise<void> {
+  const result = await verifyTurnstileToken(token, remoteIp);
+  
+  if (!result.success) {
+    throw new Error(result.error || 'Bot verification failed');
+  }
+}
+
