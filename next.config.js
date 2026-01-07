@@ -2,6 +2,12 @@
 const nextConfig = {
   // Suppress warnings for optional wallet connector dependencies
   webpack: (config, { isServer }) => {
+    // Resolve path aliases
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': require('path').resolve(__dirname, 'src'),
+    };
+
     if (!isServer) {
       // These are optional peer dependencies from @wagmi/connectors
       // They're only needed if you use those specific connectors

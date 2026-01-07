@@ -4,14 +4,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '../../../src/db/client';
-import { consolidationRequests, consolidationAnalytics } from '../../../src/db/schema';
-import { sql, desc } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {
     // Try to query database if available
     try {
+      // Dynamic import to avoid build-time errors
+      const { db } = await import('@/db/client');
+      const { consolidationRequests, consolidationAnalytics } = await import('@/db/schema');
+      const { sql, desc } = await import('drizzle-orm');
+
       // Aggregate metrics from consolidation_requests
       const [metrics] = await db
         .select({
