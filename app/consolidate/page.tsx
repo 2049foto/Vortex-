@@ -54,6 +54,7 @@ export default function ConsolidatePage() {
       isExecuting={isExecuting}
       error={error}
       onExecute={handleExecute}
+      onNavigate={(path) => router.push(path)}
     />
   );
 }

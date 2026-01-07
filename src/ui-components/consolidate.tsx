@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -9,8 +8,16 @@ import { Badge } from '@/components/ui/badge';
 
 const STEPS = ['Review', 'Quote', 'Sponsor', 'Success'];
 
-export default function ConsolidatePage() {
-  const navigate = useNavigate();
+interface ConsolidateProps {
+  address?: string;
+  tokens?: any[];
+  isExecuting?: boolean;
+  error?: string | null;
+  onExecute?: (tokenAddresses?: string[]) => void;
+  onNavigate?: (path: string) => void;
+}
+
+export function Consolidate({ address, tokens, isExecuting, error, onExecute, onNavigate }: ConsolidateProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -236,7 +243,7 @@ export default function ConsolidatePage() {
                 </div>
                 
                 <div className="flex flex-col gap-4 max-w-sm mx-auto pt-4">
-                  <Button size="xl" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl shadow-emerald-600/20 rounded-2xl font-bold" onClick={() => navigate('/dashboard')}>
+                  <Button size="xl" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl shadow-emerald-600/20 rounded-2xl font-bold" onClick={() => onNavigate && onNavigate('/dashboard')}>
                     Return to Dashboard
                   </Button>
                   <Button variant="ghost" className="w-full text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 font-medium" onClick={() => window.open('https://basescan.org', '_blank')}>

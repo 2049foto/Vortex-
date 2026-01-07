@@ -6,11 +6,13 @@
 
 import { useState } from 'react';
 import { useAccount } from 'wagmi';
+import { useRouter } from 'next/navigation';
 import { Scan } from '../../src/ui-components/scan';
 import { scanWallet } from '../../src/lib/api';
 
 export default function ScanPage() {
   const { address } = useAccount();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +45,7 @@ export default function ScanPage() {
       scanResult={scanResult}
       error={error}
       onScan={handleScan}
+      onNavigate={(path) => router.push(path)}
     />
   );
 }

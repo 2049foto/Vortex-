@@ -3,10 +3,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Sparkles, ScanLine, ArrowRight, TrendingUp, ShieldCheck, Coins, PieChart, Activity } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
 
-export default function DashboardPage() {
-  const navigate = useNavigate();
+interface DashboardProps {
+  address?: string;
+  history?: any;
+  isLoading?: boolean;
+  error?: string | null;
+  onNavigate?: (path: string) => void;
+}
+
+export function Dashboard({ address, history, isLoading, error, onNavigate }: DashboardProps) {
 
   // Mock user stats
   const stats = [
@@ -48,7 +54,7 @@ export default function DashboardPage() {
           <motion.p variants={item} className="text-lg text-slate-500 mt-2 font-light">Welcome back, <span className="text-indigo-600 font-semibold font-mono bg-indigo-50 px-2 py-0.5 rounded-md">0x123...4567</span></motion.p>
         </div>
         <motion.div variants={item}>
-          <Button onClick={() => navigate('/scan')} variant="iridescent" size="lg" className="shadow-xl shadow-indigo-500/20" glow>
+          <Button onClick={() => onNavigate && onNavigate('/scan')} variant="iridescent" size="lg" className="shadow-xl shadow-indigo-500/20" glow>
             <ScanLine className="w-5 h-5 mr-2" />
             Start New Scan
           </Button>
@@ -135,7 +141,7 @@ export default function DashboardPage() {
                   ))}
                   <div className="w-8 h-8 rounded-full border-2 border-indigo-600 bg-indigo-900 flex items-center justify-center text-[10px] font-bold">+8</div>
                </div>
-               <Button variant="secondary" size="lg" className="w-full text-indigo-600 font-bold bg-white hover:bg-indigo-50 border-none shadow-lg" onClick={() => navigate('/scan')}>
+               <Button variant="secondary" size="lg" className="w-full text-indigo-600 font-bold bg-white hover:bg-indigo-50 border-none shadow-lg" onClick={() => onNavigate && onNavigate('/scan')}>
                  Review & Clean
                  <ArrowRight className="w-4 h-4 ml-2" />
                </Button>
@@ -161,7 +167,7 @@ export default function DashboardPage() {
                    <div className="font-bold text-emerald-600 text-sm font-mono">+$12.45</div>
                  </div>
                ))}
-               <Button variant="ghost" className="w-full mt-2 text-slate-500 hover:text-indigo-600" onClick={() => navigate('/history')}>
+               <Button variant="ghost" className="w-full mt-2 text-slate-500 hover:text-indigo-600" onClick={() => onNavigate && onNavigate('/history')}>
                  View All Activity
                </Button>
              </CardContent>

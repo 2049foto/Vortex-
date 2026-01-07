@@ -3,23 +3,22 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight, ShieldCheck, Zap, Layers } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 
 interface LandingProps {
-  onConnect: () => void;
-  isConnected: boolean;
+  onConnect?: () => void;
+  isConnected?: boolean;
+  onNavigate?: (path: string) => void;
 }
 
-export default function LandingPage({ onConnect, isConnected }: LandingProps) {
-  const navigate = useNavigate();
+export function Landing({ onConnect, isConnected, onNavigate }: LandingProps) {
   const { scrollY } = useScroll();
   const y1 = useTransform(scrollY, [0, 500], [0, 200]);
   const y2 = useTransform(scrollY, [0, 500], [0, -150]);
 
   const handleCta = () => {
-    if (isConnected) {
-      navigate('/dashboard');
-    } else {
+    if (isConnected && onNavigate) {
+      onNavigate('/dashboard');
+    } else if (onConnect) {
       onConnect();
     }
   };

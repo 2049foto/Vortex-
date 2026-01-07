@@ -6,11 +6,13 @@
 
 import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
+import { useRouter } from 'next/navigation';
 import { Dashboard } from '../../src/ui-components/dashboard';
 import { getUserHistory } from '../../src/lib/api';
 
 export default function DashboardPage() {
   const { address } = useAccount();
+  const router = useRouter();
   const [history, setHistory] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +54,7 @@ export default function DashboardPage() {
       history={history}
       isLoading={isLoading}
       error={error}
+      onNavigate={(path) => router.push(path)}
     />
   );
 }

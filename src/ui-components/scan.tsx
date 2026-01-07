@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { TokenCard } from '@/components/token/token-card';
@@ -8,8 +7,16 @@ import { Search, Loader2, Filter, AlertCircle, ArrowRight, ShieldCheck, Trash2 }
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 
-export default function ScanPage() {
-  const navigate = useNavigate();
+interface ScanProps {
+  address?: string;
+  isLoading?: boolean;
+  scanResult?: any;
+  error?: string | null;
+  onScan?: (address?: string) => void;
+  onNavigate?: (path: string) => void;
+}
+
+export function Scan({ address, isLoading, scanResult, error, onScan, onNavigate }: ScanProps) {
   const [isScanning, setIsScanning] = useState(true);
   const [scanProgress, setScanProgress] = useState(0);
   const [activeTab, setActiveTab] = useState<'LEGIT' | 'DUST' | 'MICRODUST' | 'RISK'>('DUST');
@@ -210,7 +217,7 @@ export default function ScanPage() {
              <Button 
                variant="premium"
                size="lg"
-               onClick={() => navigate('/consolidate')} 
+               onClick={() => onNavigate && onNavigate('/consolidate')} 
                disabled={selectedTokens.length === 0}
                className="rounded-xl shadow-lg shadow-slate-900/20"
              >
