@@ -7,10 +7,11 @@ import { ArrowRight, ShieldCheck, Zap, Layers } from 'lucide-react';
 interface LandingProps {
   onConnect?: () => void;
   isConnected?: boolean;
+  address?: string;
   onNavigate?: (path: string) => void;
 }
 
-export function Landing({ onConnect, isConnected, onNavigate }: LandingProps) {
+export function Landing({ onConnect, isConnected, address, onNavigate }: LandingProps) {
   const { scrollY } = useScroll();
   const y1 = useTransform(scrollY, [0, 500], [0, 200]);
   const y2 = useTransform(scrollY, [0, 500], [0, -150]);
@@ -98,9 +99,14 @@ export function Landing({ onConnect, isConnected, onNavigate }: LandingProps) {
               {isConnected ? 'Launch Dashboard' : 'Connect Wallet'}
               <ArrowRight className="ml-2 w-5 h-5" />
             </Button>
-            <Button size="xl" variant="outline" className="w-full sm:w-auto border-2 hover:bg-white/60 bg-white/40 backdrop-blur-sm">
-              Watch Demo
-              <div className="ml-2 w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px]">▶</div>
+            <Button 
+              size="xl" 
+              variant="outline" 
+              className="w-full sm:w-auto border-2 hover:bg-white/60 bg-white/40 backdrop-blur-sm"
+              onClick={() => onNavigate?.('/scan')}
+            >
+              Scan Wallet
+              <ArrowRight className="ml-2 w-5 h-5" />
             </Button>
           </motion.div>
 

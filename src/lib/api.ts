@@ -3,7 +3,8 @@
  * Frontend utilities for calling backend APIs
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+// Use Next.js API routes (same origin) or backend URL if specified
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 export class APIError extends Error {
   constructor(
@@ -23,7 +24,8 @@ async function apiCall<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+  // Use Next.js API routes (relative path) or full backend URL
+  const url = API_BASE_URL ? `${API_BASE_URL}${endpoint}` : endpoint;
 
   try {
     const response = await fetch(url, {

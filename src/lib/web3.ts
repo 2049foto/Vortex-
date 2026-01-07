@@ -44,8 +44,8 @@ const getConnectors = () => {
       metadata: {
         name: 'Vortex Protocol',
         description: 'Premium Portfolio Hygiene Engine',
-        url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-        icons: [`${process.env.NEXT_PUBLIC_APP_URL || ''}/logo.png`],
+        url: typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
+        icons: [`${typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || '')}/logo.png`],
       },
       showQrModal: true,
     }),
