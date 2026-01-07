@@ -125,6 +125,7 @@ export const TIMEOUTS = {
 export const CACHE_TTL = {
   TOKEN_CLASSIFICATION: 86400, // 24 hours
   TOKEN_PRICE: 60, // 1 minute
+  TOKEN_METADATA: 1800, // 30 minutes
   RISK_SCORE: 3600, // 1 hour
   USER_PROFILE: 600, // 10 minutes
   ANALYTICS: 300, // 5 minutes

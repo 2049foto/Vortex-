@@ -270,7 +270,7 @@ export async function calculateRiskScore(
 async function fetchSecurityData(token: TokenHolding): Promise<any> {
   try {
     const response = await fetch(
-      `${env.GOPLUS_API_URL || 'https://api.gopluslabs.io'}/api/v1/token_security/${token.chainId}?contract_addresses=${token.address}`,
+      `${env.NEXT_PUBLIC_GOPLUS_API_URL || 'https://api.gopluslabs.io/api/v1'}/token_security/${token.chainId}?contract_addresses=${token.address}`,
       {
         signal: AbortSignal.timeout(TIMEOUTS.API),
       }

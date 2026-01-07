@@ -7,8 +7,8 @@
 import { useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter } from 'next/navigation';
-import { Scan } from '../../src/ui-components/scan';
-import { scanWallet } from '../../src/lib/api';
+import { Scan } from '@/ui-components/scan';
+import { scanWallet } from '@/lib/api';
 
 export default function ScanPage() {
   const { address } = useAccount();

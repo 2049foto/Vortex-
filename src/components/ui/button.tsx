@@ -1,5 +1,6 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
+import { motion } from "framer-motion"
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive' | 'glass' | 'iridescent' | 'soft' | 'neo' | 'premium';
@@ -34,12 +35,24 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       icon: "h-11 w-11"
     };
 
+    // Exclude animation-related props that conflict with framer-motion
+    const {
+      onDrag,
+      onDragStart,
+      onDragEnd,
+      onAnimationStart,
+      onAnimationEnd,
+      onAnimationIteration,
+      ...restProps
+    } = props;
+    
     return (
-      <button
+      <motion.button
+        whileTap={{ scale: 0.97 }}
         className={cn(baseStyles, variants[variant], sizes[size], className)}
         ref={ref}
         disabled={isLoading || props.disabled}
-        {...props}
+        {...(restProps as any)}
       >
         {/* Glow Effect */}
         {glow && (
@@ -55,7 +68,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
         ) : null}
         <span className="relative z-20 flex items-center gap-2">{children}</span>
-      </button>
+      </motion.button>
     )
   }
 )

@@ -6,9 +6,9 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { getConsolidationStatus } from '../../src/lib/api';
-import { Card } from '../../src/components/ui/card';
-import { Button } from '../../src/components/ui/button';
+import { getConsolidationStatus } from '@/lib/api';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 function SuccessPageContent() {
   const searchParams = useSearchParams();

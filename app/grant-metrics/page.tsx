@@ -6,8 +6,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getAnalyticsDashboard } from '../../src/lib/api';
-import { Card } from '../../src/components/ui/card';
+import { getAnalyticsDashboard } from '@/lib/api';
+import { Card } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function GrantMetricsPage() {

@@ -7,7 +7,7 @@ import { env } from '../config/env';
 import { createLogger } from '../utils/logger';
 import { db } from '../db/client';
 import { notificationTokens } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 const logger = createLogger('notification');
 
@@ -34,14 +34,16 @@ export async function registerNotificationToken(
       .insert(notificationTokens)
       .values({
         userId,
+        clientId: platform === 'farcaster' ? 'farcaster' : 'web',
+        callbackUrl: platform === 'farcaster' ? env.FARCASTER_API_URL || 'https://api.warpcast.com' : '',
         token,
-        platform,
-        isActive: true,
+        enabled: true,
       })
       .onConflictDoUpdate({
-        target: [notificationTokens.userId, notificationTokens.token],
+        target: [notificationTokens.userId, notificationTokens.clientId],
         set: {
-          isActive: true,
+          token,
+          enabled: true,
           updatedAt: new Date(),
         },
       });
@@ -62,8 +64,10 @@ export async function sendNotification(payload: NotificationPayload): Promise<vo
     const tokens = await db
       .select()
       .from(notificationTokens)
-      .where(eq(notificationTokens.userId, payload.userId))
-      .where(eq(notificationTokens.isActive, true));
+      .where(and(
+        eq(notificationTokens.userId, payload.userId),
+        eq(notificationTokens.enabled, true)
+      ));
 
     if (tokens.length === 0) {
       logger.warn({ userId: payload.userId }, 'No notification tokens found');
@@ -73,9 +77,9 @@ export async function sendNotification(payload: NotificationPayload): Promise<vo
     // Send to each platform
     const results = await Promise.allSettled(
       tokens.map(async (tokenRecord) => {
-        if (tokenRecord.platform === 'farcaster') {
+        if (tokenRecord.clientId === 'farcaster') {
           return sendFarcasterNotification(tokenRecord.token, payload);
-        } else if (tokenRecord.platform === 'web') {
+        } else if (tokenRecord.clientId === 'web') {
           return sendWebPushNotification(tokenRecord.token, payload);
         }
       })
@@ -194,9 +198,11 @@ export async function deactivateNotificationToken(
 ): Promise<void> {
   await db
     .update(notificationTokens)
-    .set({ isActive: false })
-    .where(eq(notificationTokens.userId, userId))
-    .where(eq(notificationTokens.token, token));
+    .set({ enabled: false, updatedAt: new Date() })
+    .where(and(
+      eq(notificationTokens.userId, userId),
+      eq(notificationTokens.token, token)
+    ));
 
   logger.info({ userId, token }, 'Notification token deactivated');
 }

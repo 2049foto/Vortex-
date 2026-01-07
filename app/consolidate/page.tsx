@@ -7,8 +7,8 @@
 import { Suspense, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Consolidate } from '../../src/ui-components/consolidate';
-import { createConsolidation } from '../../src/lib/api';
+import { Consolidate } from '@/ui-components/consolidate';
+import { createConsolidation } from '@/lib/api';
 
 function ConsolidatePageContent() {
   const { address } = useAccount();

@@ -1,7 +1,10 @@
+'use client';
+
 import React from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Navbar } from '@/components/layout/navbar';
 import { ArrowRight, ShieldCheck, Zap, Layers } from 'lucide-react';
 
 interface LandingProps {
@@ -41,7 +44,8 @@ export function Landing({ onConnect, isConnected, address, onNavigate }: Landing
   };
 
   return (
-    <div className="flex flex-col min-h-screen pt-24 overflow-hidden relative selection:bg-primary/20">
+    <div className="flex flex-col min-h-screen overflow-hidden relative selection:bg-primary/20">
+      <Navbar isConnected={isConnected || false} onConnect={onConnect || (() => {})} address={address} />
       
       {/* Premium Background */}
       <div className="fixed inset-0 -z-20 bg-background" />

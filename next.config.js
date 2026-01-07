@@ -39,6 +39,9 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react', 'recharts'],
   },
 
+  // Skip page collection during build if needed
+  pageExtensions: ['ts', 'tsx', 'js', 'jsx'],
+
   // Configure image domains if needed
   images: {
     domains: ['localhost'],

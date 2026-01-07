@@ -7,8 +7,8 @@
 import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter } from 'next/navigation';
-import { Dashboard } from '../../src/ui-components/dashboard';
-import { getUserHistory } from '../../src/lib/api';
+import { Dashboard } from '@/ui-components/dashboard';
+import { getUserHistory } from '@/lib/api';
 
 export default function DashboardPage() {
   const { address } = useAccount();

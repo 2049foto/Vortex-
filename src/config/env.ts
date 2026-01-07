@@ -23,11 +23,17 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   NEXTAUTH_SECRET: z.string().min(32),
   
-  // Blockchain RPC
+  // Blockchain RPC - EVM
   NEXT_PUBLIC_QUICKNODE_BASE_HTTPS: z.string().url(),
   NEXT_PUBLIC_ALCHEMY_API_KEY: z.string(),
   MORALIS_API_KEY: z.string(),
+  NEXT_PUBLIC_MORALIS_API_URL: z.string().url().optional(),
   NEXT_PUBLIC_INFURA_PROJECT_ID: z.string(),
+  
+  // Blockchain RPC - Solana
+  NEXT_PUBLIC_QUICKNODE_SOLANA_HTTPS: z.string().url().optional(),
+  NEXT_PUBLIC_HELIUS_RPC: z.string().url().optional(),
+  NEXT_PUBLIC_HELIUS_API_KEY: z.string().optional(),
   
   // Account Abstraction
   PIMLICO_API_KEY: z.string(),
@@ -56,6 +62,8 @@ const envSchema = z.object({
   
   // Farcaster
   FARCASTER_FRAMES_ENABLED: z.string().default('true'),
+  FARCASTER_API_URL: z.string().url().default('https://api.warpcast.com'),
+  FARCASTER_BOT_TOKEN: z.string().optional(),
   NEXT_PUBLIC_FARCASTER_HUB_URL: z.string().url().optional(),
   
   // App Config

@@ -135,6 +135,19 @@ export const chains: Record<string, ChainConfig> = {
     blockExplorer: 'https://explorer.zksync.io',
     isTestnet: false,
   },
+  solana: {
+    chainId: 0, // Solana uses different identifier system
+    name: 'Solana',
+    nativeToken: 'SOL',
+    rpcUrls: [
+      env.NEXT_PUBLIC_HELIUS_RPC ?? 'https://api.mainnet-beta.solana.com',
+      env.NEXT_PUBLIC_QUICKNODE_SOLANA_HTTPS ?? 'https://api.mainnet-beta.solana.com',
+      'https://solana-api.projectserum.com',
+      'https://rpc.ankr.com/solana',
+    ],
+    blockExplorer: 'https://solscan.io',
+    isTestnet: false,
+  },
 };
 
 /**

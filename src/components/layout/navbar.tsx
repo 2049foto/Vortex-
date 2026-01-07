@@ -6,10 +6,11 @@ import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Wallet, Menu, X, Sparkles, LayoutDashboard, History, ScanLine, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface NavbarProps {
   isConnected: boolean;
-  onConnect: () => void;
+  onConnect?: () => void;
   address?: string;
 }
 
@@ -26,8 +27,10 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
 
   return (
     <>
-      <nav 
-        className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-6xl rounded-full border border-white/40 bg-white/70 backdrop-blur-xl shadow-lg shadow-indigo-900/5 transition-all duration-300 animate-in slide-in-from-top"
+      <motion.nav 
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-6xl rounded-full border border-white/40 bg-white/70 backdrop-blur-xl shadow-lg shadow-indigo-900/5 transition-all duration-300"
       >
         <div className="px-6 h-16 flex items-center justify-between">
           {/* Logo */}
@@ -47,11 +50,15 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
                 <Link
                   key={link.path}
                   href={link.path}
-                  className={cn(
-                    "relative px-5 py-2 rounded-full text-sm font-medium transition-all",
-                    isActive && "bg-white shadow-sm border border-black/5"
-                  )}
+                  className="relative px-5 py-2 rounded-full text-sm font-medium transition-all"
                 >
+                  {isActive && (
+                    <motion.div
+                      layoutId="nav-pill"
+                      className="absolute inset-0 bg-white shadow-sm rounded-full border border-black/5"
+                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
                   <span className={cn(
                     "relative z-10 flex items-center gap-2 transition-colors",
                     isActive ? "text-indigo-600 font-semibold" : "text-slate-500 hover:text-slate-900"
@@ -69,7 +76,7 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
             <Button 
               variant={isConnected ? "outline" : "premium"}
               size="sm"
-              onClick={onConnect}
+              onClick={onConnect || (() => {})}
               className={cn("rounded-full font-medium", isConnected ? "bg-white/50 border-slate-200" : "")}
             >
               {isConnected ? (
@@ -78,7 +85,7 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
-                  {address?.slice(0, 6)}...{address?.slice(-4)}
+                  {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Connected'}
                 </span>
               ) : (
                 <span className="flex items-center gap-2">
@@ -97,11 +104,17 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
             {isMobileMenuOpen ? <X /> : <Menu />}
           </button>
         </div>
-      </nav>
+      </motion.nav>
 
       {/* Mobile Menu */}
-      {isMobileMenuOpen && (
-        <div className="fixed top-24 left-4 right-4 z-40 p-4 rounded-3xl border border-white/20 bg-white/90 backdrop-blur-2xl shadow-2xl animate-in fade-in slide-in-from-top duration-200">
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-24 left-4 right-4 z-40 p-4 rounded-3xl border border-white/20 bg-white/90 backdrop-blur-2xl shadow-2xl"
+          >
           <div className="space-y-2">
             {isConnected && navLinks.map((link) => (
               <Link
@@ -116,19 +129,20 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
                 {link.name}
               </Link>
             ))}
-            <Button 
-              className="w-full h-12 rounded-xl text-lg mt-4" 
-              variant={isConnected ? "outline" : "premium"}
-              onClick={() => {
-                onConnect();
-                setIsMobileMenuOpen(false);
-              }}
-            >
-              {isConnected ? "Disconnect" : "Connect Wallet"}
-            </Button>
+              <Button 
+                className="w-full h-12 rounded-xl text-lg mt-4" 
+                variant={isConnected ? "outline" : "premium"}
+                onClick={() => {
+                  onConnect?.();
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                {isConnected ? "Disconnect" : "Connect Wallet"}
+              </Button>
           </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
