@@ -1,45 +1,91 @@
 /**
  * Vortex Protocol - Scan API Route (Next.js)
- * Proxies to backend or implements directly
+ * Implements backend logic directly
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-
-const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { scanWallet } from '../../../src/services/portfolioService';
+import { batchCalculateRiskScores } from '../../../src/services/riskScoringService';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
-    // If backend is available, proxy to it
-    if (BACKEND_URL && BACKEND_URL !== 'http://localhost:3001') {
-      const response = await fetch(`${BACKEND_URL}/api/v1/scan`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    const { walletAddress, chainIds } = body;
+
+    // Validate wallet address
+    if (!walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid wallet address',
         },
-        body: JSON.stringify(body),
-      });
-      
-      const data = await response.json();
-      return NextResponse.json(data, { status: response.status });
+        { status: 400 }
+      );
     }
-    
-    // Fallback: Return mock data for development
+
+    // Step 1: Scan wallet for tokens
+    const tokens = await scanWallet(walletAddress, chainIds);
+
+    if (tokens.length === 0) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          wallet: walletAddress,
+          tokens: [],
+          summary: {
+            totalTokens: 0,
+            totalValue: 0,
+            byTier: { LEGIT: 0, DUST: 0, MICRODUST: 0, RISK: 0 },
+            consolidationOpportunity: {
+              tokenCount: 0,
+              totalValue: 0,
+            },
+          },
+        },
+      });
+    }
+
+    // Step 2: Calculate risk scores
+    const riskScores = await batchCalculateRiskScores(tokens);
+
+    // Step 3: Merge tokens with risk data
+    const tokensWithRisk = tokens.map((token) => {
+      const riskKey = `${token.chainId}:${token.address}`;
+      const risk = riskScores.get(riskKey);
+
+      return {
+        ...token,
+        tier: risk?.tier || 'LEGIT',
+        riskScore: risk?.totalScore || 0,
+        reasons: risk?.reasons || [],
+        recommendations: risk?.recommendations || [],
+      };
+    });
+
+    // Step 4: Generate summary
+    const summary = {
+      totalTokens: tokensWithRisk.length,
+      totalValue: tokensWithRisk.reduce((sum, t) => sum + t.valueUsd, 0),
+      byTier: {
+        LEGIT: tokensWithRisk.filter((t) => t.tier === 'LEGIT').length,
+        DUST: tokensWithRisk.filter((t) => t.tier === 'DUST').length,
+        MICRODUST: tokensWithRisk.filter((t) => t.tier === 'MICRODUST').length,
+        RISK: tokensWithRisk.filter((t) => t.tier === 'RISK').length,
+      },
+      consolidationOpportunity: {
+        tokenCount: tokensWithRisk.filter((t) => t.tier === 'DUST' || t.tier === 'MICRODUST').length,
+        totalValue: tokensWithRisk
+          .filter((t) => t.tier === 'DUST' || t.tier === 'MICRODUST')
+          .reduce((sum, t) => sum + t.valueUsd, 0),
+      },
+    };
+
     return NextResponse.json({
       success: true,
       data: {
-        wallet: body.walletAddress,
-        tokens: [],
-        summary: {
-          totalTokens: 0,
-          totalValue: 0,
-          byTier: { LEGIT: 0, DUST: 0, MICRODUST: 0, RISK: 0 },
-          consolidationOpportunity: {
-            tokenCount: 0,
-            totalValue: 0,
-          },
-        },
+        wallet: walletAddress,
+        tokens: tokensWithRisk,
+        summary,
       },
     });
   } catch (error) {

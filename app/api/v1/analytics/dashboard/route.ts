@@ -1,39 +1,96 @@
 /**
  * Vortex Protocol - Analytics Dashboard API Route (Next.js)
+ * Implements backend logic directly
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-
-const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { db } from '../../../src/db/client';
+import { consolidationRequests, consolidationAnalytics } from '../../../src/db/schema';
+import { sql, desc } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {
-    // If backend is available, proxy to it
-    if (BACKEND_URL && BACKEND_URL !== 'http://localhost:3001') {
-      const response = await fetch(`${BACKEND_URL}/api/v1/analytics/dashboard`, {
-        method: 'GET',
-      });
-      
-      const data = await response.json();
-      return NextResponse.json(data, { status: response.status });
-    }
-    
-    // Fallback: Return mock analytics data
-    return NextResponse.json({
-      success: true,
-      data: {
-        overview: {
-          totalPortfoliosClean: 0,
-          dustValueCleaned: '0.00',
-          baseTvlAdded: '0.00',
-          gasSaved: '0.00',
-          totalConsolidations: 0,
-          uniqueUsers: 0,
+    // Try to query database if available
+    try {
+      // Aggregate metrics from consolidation_requests
+      const [metrics] = await db
+        .select({
+          totalConsolidations: sql<number>`COUNT(*)`,
+          completedConsolidations: sql<number>`COUNT(CASE WHEN status = 'completed' THEN 1 END)`,
+          uniqueUsers: sql<number>`COUNT(DISTINCT user_id)`,
+          totalGasSaved: sql<string>`COALESCE(SUM(CAST(actual_gas_usd AS DECIMAL)), 0)`,
+          totalValue: sql<string>`COALESCE(SUM(CAST(output_amount AS DECIMAL)), 0)`,
+        })
+        .from(consolidationRequests);
+
+      // Get time-series data (last 30 days)
+      const timeSeries = await db
+        .select({
+          date: consolidationAnalytics.date,
+          consolidations: consolidationAnalytics.totalConsolidations,
+          volumeUsd: consolidationAnalytics.volumeUsd,
+          gasSavedUsd: consolidationAnalytics.gasSavedUsd,
+        })
+        .from(consolidationAnalytics)
+        .orderBy(desc(consolidationAnalytics.date))
+        .limit(30);
+
+      // Calculate Base TVL (total value on Base chain)
+      const [baseTvl] = await db
+        .select({
+          tvl: sql<string>`COALESCE(SUM(CAST(output_amount AS DECIMAL)), 0)`,
+        })
+        .from(consolidationRequests)
+        .where(sql`8453 = ANY(chain_ids)`); // Base chain ID
+
+      // Recent activity
+      const recentActivity = await db
+        .select()
+        .from(consolidationRequests)
+        .orderBy(desc(consolidationRequests.createdAt))
+        .limit(10);
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          overview: {
+            totalPortfoliosClean: metrics.completedConsolidations || 0,
+            dustValueCleaned: parseFloat(metrics.totalValue || '0').toFixed(2),
+            baseTvlAdded: parseFloat(baseTvl?.tvl || '0').toFixed(2),
+            gasSaved: parseFloat(metrics.totalGasSaved || '0').toFixed(2),
+            totalConsolidations: metrics.totalConsolidations || 0,
+            uniqueUsers: metrics.uniqueUsers || 0,
+          },
+          timeSeries: timeSeries.reverse(), // Chronological order
+          recentActivity: recentActivity.map((activity) => ({
+            id: activity.id,
+            user: activity.userId,
+            status: activity.status,
+            tokenCount: Array.isArray(activity.tokensIn) ? activity.tokensIn.length : 0,
+            createdAt: activity.createdAt,
+          })),
         },
-        timeSeries: [],
-        recentActivity: [],
-      },
-    });
+      });
+    } catch (dbError) {
+      // Database not available, return mock data
+      console.warn('Database not available, using mock data:', dbError);
+      
+      return NextResponse.json({
+        success: true,
+        data: {
+          overview: {
+            totalPortfoliosClean: 0,
+            dustValueCleaned: '0.00',
+            baseTvlAdded: '0.00',
+            gasSaved: '0.00',
+            totalConsolidations: 0,
+            uniqueUsers: 0,
+          },
+          timeSeries: [],
+          recentActivity: [],
+        },
+      });
+    }
   } catch (error) {
     console.error('Analytics API error:', error);
     return NextResponse.json(
