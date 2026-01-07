@@ -14,7 +14,7 @@ import { simulateTransaction } from '../blockchain/tenderly';
 import { sponsorWithFallback } from '../blockchain/coinbase';
 import { sendUserOp, getUserOpReceipt } from '../blockchain/pimlico';
 import { db } from '../db/client';
-import { consolidationRequests, consolidationAnalytics } from '../db/schema';
+import { consolidationRequests, consolidationAnalytics, users } from '../db/schema';
 import { eq } from 'drizzle-orm';
 
 const logger = createLogger('consolidation');
@@ -206,19 +206,38 @@ export async function executeConsolidation(
 ): Promise<{ requestId: string; status: 'pending' | 'success' | 'failed' }> {
   logger.info({ planId, walletAddress }, 'Executing consolidation');
 
+  // Get or create user first
+  const { users } = await import('../db/schema');
+  let [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.walletAddress, walletAddress))
+    .limit(1);
+
+  if (!user) {
+    [user] = await db
+      .insert(users)
+      .values({
+        walletAddress,
+      })
+      .returning();
+  }
+
   // Create DB record
   const [request] = await db
     .insert(consolidationRequests)
     .values({
-      id: planId,
-      userId: walletAddress,
-      status: 'pending',
-      tokensIn: plan.swaps.map((s) => s.fromToken.address),
-      tokenOut: plan.swaps[0]?.toToken || '',
-      chainIds: plan.swaps.map((s) => s.fromToken.chainId),
-      estimatedGasUsd: '0', // TODO: Calculate
-      actualGasUsd: null,
-      outputAmount: null,
+      userId: user.id,
+      status: 'PENDING',
+      inputTokens: plan.swaps.map((s) => ({
+        address: s.fromToken.address,
+        chainId: s.fromToken.chainId,
+        amountRaw: s.amountIn,
+        valueUsd: s.fromToken.valueUsd,
+      })),
+      outputToken: plan.swaps[0]?.toToken || 'ETH',
+      outputChainId: 8453, // Base
+      estimatedOutput: plan.estimatedOutput,
       errorMessage: null,
     })
     .returning();
@@ -232,13 +251,17 @@ export async function executeConsolidation(
     // Update to success
     await db
       .update(consolidationRequests)
-      .set({ status: 'completed', outputAmount: plan.estimatedOutput })
-      .where(eq(consolidationRequests.id, planId));
+      .set({ 
+        status: 'CONFIRMED', 
+        actualOutput: plan.estimatedOutput,
+        completedAt: new Date(),
+      })
+      .where(eq(consolidationRequests.id, request.id));
 
     // Update analytics
     await updateAnalytics(plan, walletAddress);
 
-    return { requestId: planId, status: 'success' };
+    return { requestId: request.id, status: 'success' };
   } catch (error) {
     logger.error({ error, planId }, 'Consolidation execution failed');
 
@@ -246,12 +269,12 @@ export async function executeConsolidation(
     await db
       .update(consolidationRequests)
       .set({ 
-        status: 'failed',
+        status: 'FAILED',
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
       })
-      .where(eq(consolidationRequests.id, planId));
+      .where(eq(consolidationRequests.id, request.id));
 
-    return { requestId: planId, status: 'failed' };
+    return { requestId: request.id, status: 'failed' };
   }
 }
 
@@ -345,14 +368,42 @@ async function updateAnalytics(plan: ConsolidationPlan, walletAddress: string): 
     .filter((t) => t.action === 'swap')
     .reduce((sum, t) => sum + t.token.valueUsd, 0);
 
-  await db.insert(consolidationAnalytics).values({
-    date: new Date().toISOString().split('T')[0],
-    totalConsolidations: 1,
-    uniqueUsers: 1,
-    volumeUsd: valueConsolidated.toString(),
-    gasSavedUsd: '0', // TODO: Calculate
-    baseTvl: valueConsolidated.toString(),
-  });
+  const date = new Date().toISOString().split('T')[0];
+  
+  // Check if record exists for today
+  const [existing] = await db
+    .select()
+    .from(consolidationAnalytics)
+    .where(eq(consolidationAnalytics.date, date))
+    .limit(1);
+
+  if (existing) {
+    // Update existing record
+    await db
+      .update(consolidationAnalytics)
+      .set({
+        totalConsolidations: existing.totalConsolidations + 1,
+        totalDustCleanedUsd: (parseFloat(existing.totalDustCleanedUsd || '0') + valueConsolidated).toString(),
+        totalOutputValueUsd: (parseFloat(existing.totalOutputValueUsd || '0') + valueConsolidated).toString(),
+        totalBaseTvlAddedUsd: (parseFloat(existing.totalBaseTvlAddedUsd || '0') + valueConsolidated).toString(),
+        baseConsolidations: existing.baseConsolidations + 1,
+      })
+      .where(eq(consolidationAnalytics.date, date));
+  } else {
+    // Create new record
+    await db.insert(consolidationAnalytics).values({
+      date,
+      totalConsolidations: 1,
+      totalDustCleanedUsd: valueConsolidated.toString(),
+      totalOutputValueUsd: valueConsolidated.toString(),
+      totalGasSavedUsd: '0', // TODO: Calculate
+      totalBaseTvlAddedUsd: valueConsolidated.toString(),
+      baseConsolidations: 1,
+      uniqueUsers: 1,
+      newUsers: 1,
+      returningUsers: 0,
+    });
+  }
 }
 
 /**
