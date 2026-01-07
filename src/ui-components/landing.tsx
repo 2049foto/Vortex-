@@ -61,13 +61,13 @@ export function Landing({ onConnect, isConnected, address, onNavigate }: Landing
         >
           {/* Badge */}
           <motion.div variants={item} className="flex justify-center">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/60 backdrop-blur-md border border-white/60 shadow-sm text-sm font-medium text-slate-600 ring-1 ring-black/5 hover:bg-white/80 transition-colors cursor-pointer group">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/60 backdrop-blur-md border border-white/60 shadow-sm text-sm font-medium text-muted-foreground ring-1 ring-black/5 hover:bg-white/80 transition-colors cursor-pointer group">
               <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
               </span>
-              <span className="font-display tracking-tight text-slate-800">Vortex Premium v2.0</span>
-              <span className="w-px h-3 bg-slate-300 mx-1" />
+              <span className="font-display tracking-tight text-foreground">Vortex Premium v2.0</span>
+              <span className="w-px h-3 bg-border mx-1" />
               <span className="text-primary flex items-center gap-1 group-hover:gap-2 transition-all">
                 Read Updates <ArrowRight className="w-3 h-3" />
               </span>
@@ -79,7 +79,7 @@ export function Landing({ onConnect, isConnected, address, onNavigate }: Landing
             variants={item}
             className="text-6xl md:text-8xl font-display font-bold tracking-tight leading-[1] md:leading-[0.9]"
           >
-            <span className="text-slate-900 drop-shadow-sm">Portfolio Hygiene</span>
+            <span className="text-foreground drop-shadow-sm">Portfolio Hygiene</span>
             <br />
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 animate-gradient-x pb-4">
               Reimagined
@@ -88,9 +88,9 @@ export function Landing({ onConnect, isConnected, address, onNavigate }: Landing
 
           <motion.p 
             variants={item}
-            className="text-xl md:text-2xl text-slate-500 max-w-2xl mx-auto leading-relaxed font-light"
+            className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed font-light"
           >
-            The premium engine to consolidate dust, analyze risks, and optimize your assets across <span className="font-medium text-slate-800">12+ chains</span> with bank-grade security.
+            The premium engine to consolidate dust, analyze risks, and optimize your assets across <span className="font-medium text-foreground">12+ chains</span> with bank-grade security.
           </motion.p>
 
           {/* CTA Buttons */}
@@ -111,18 +111,18 @@ export function Landing({ onConnect, isConnected, address, onNavigate }: Landing
           </motion.div>
 
           {/* Trust Metrics */}
-          <motion.div variants={item} className="pt-12 grid grid-cols-3 gap-8 md:gap-16 border-t border-slate-200/60 max-w-3xl mx-auto text-center">
+          <motion.div variants={item} className="pt-12 grid grid-cols-3 gap-8 md:gap-16 border-t border-border/60 max-w-3xl mx-auto text-center">
             <div>
-              <div className="text-3xl font-bold font-display text-slate-900">$45M+</div>
-              <div className="text-sm text-slate-500 font-medium mt-1">Volume Cleaned</div>
+              <div className="text-3xl font-bold font-display text-foreground">$45M+</div>
+              <div className="text-sm text-muted-foreground font-medium mt-1">Volume Cleaned</div>
             </div>
             <div>
-              <div className="text-3xl font-bold font-display text-slate-900">120K+</div>
-              <div className="text-sm text-slate-500 font-medium mt-1">Active Users</div>
+              <div className="text-3xl font-bold font-display text-foreground">120K+</div>
+              <div className="text-sm text-muted-foreground font-medium mt-1">Active Users</div>
             </div>
             <div>
-              <div className="text-3xl font-bold font-display text-slate-900">Zero</div>
-              <div className="text-sm text-slate-500 font-medium mt-1">Gas Fees</div>
+              <div className="text-3xl font-bold font-display text-foreground">Zero</div>
+              <div className="text-sm text-muted-foreground font-medium mt-1">Gas Fees</div>
             </div>
           </motion.div>
         </motion.div>
@@ -132,8 +132,8 @@ export function Landing({ onConnect, isConnected, address, onNavigate }: Landing
       <section className="py-32 relative">
         <div className="container mx-auto max-w-7xl px-4">
            <div className="text-center mb-20">
-             <h2 className="text-4xl md:text-5xl font-display font-bold mb-4 text-slate-900">Everything you need,<br/>nothing you don't.</h2>
-             <p className="text-lg text-slate-500 font-light">Built for the modern DeFi power user.</p>
+             <h2 className="text-4xl md:text-5xl font-display font-bold mb-4 text-foreground">Everything you need,<br/>nothing you don't.</h2>
+             <p className="text-lg text-muted-foreground font-light">Built for the modern DeFi power user.</p>
            </div>
            
            <div className="grid md:grid-cols-3 gap-8">
@@ -178,13 +178,13 @@ function FeatureCard({ icon: Icon, title, description, color }: { icon: any, tit
           <Icon className="w-8 h-8" />
         </div>
         <div>
-          <h3 className="text-2xl font-bold font-display mb-3 text-slate-900">{title}</h3>
+          <h3 className="text-2xl font-bold font-display mb-3 text-foreground">{title}</h3>
           <p className="text-muted-foreground leading-relaxed text-lg font-light">
             {description}
           </p>
         </div>
         
-        <div className="pt-4 flex items-center text-sm font-bold text-slate-900 opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+        <div className="pt-4 flex items-center text-sm font-bold text-foreground opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
           Learn more <ArrowRight className="w-4 h-4 ml-2" />
         </div>
       </CardContent>
