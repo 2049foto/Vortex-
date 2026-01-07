@@ -319,26 +319,169 @@ async function fetchSecurityData(token: TokenHolding): Promise<any> {
 }
 
 /**
- * Fetch liquidity data
+ * Fetch additional security data from Honeypot.is API
  */
-async function fetchLiquidityData(token: TokenHolding): Promise<any> {
-  return {
-    liquidityUsd: token.liquidityUsd || 0,
-    isLocked: false,
-    poolAgeDays: 0,
-  };
+async function fetchHoneypotData(token: TokenHolding): Promise<any> {
+  try {
+    // Chain mapping for honeypot.is
+    const chainMapping: Record<number, string> = {
+      1: 'eth',
+      8453: 'base',
+      42161: 'arbitrum',
+      10: 'optimism',
+      137: 'polygon',
+      56: 'bsc',
+      43114: 'avalanche',
+    };
+
+    const chain = chainMapping[token.chainId];
+    if (!chain) return null;
+
+    const response = await fetch(
+      `https://api.honeypot.is/v2/IsHoneypot?address=${token.address}&chainId=${token.chainId}`,
+      {
+        signal: AbortSignal.timeout(2000),
+      }
+    );
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    
+    return {
+      isHoneypot: data.honeypotResult?.isHoneypot || false,
+      buyTax: data.simulationResult?.buyTax || 0,
+      sellTax: data.simulationResult?.sellTax || 0,
+      transferTax: data.simulationResult?.transferTax || 0,
+      maxTxAmount: data.flags?.isMaxTx || false,
+      isAntiWhale: data.flags?.isAntiWhale || false,
+      holdersCount: data.holderAnalysis?.holders || 0,
+    };
+  } catch (error) {
+    logger.warn({ error, token: token.address }, 'Honeypot.is API failed');
+    return null;
+  }
 }
 
 /**
- * Fetch holder data
+ * Fetch liquidity data from DexScreener API
+ */
+async function fetchLiquidityData(token: TokenHolding): Promise<any> {
+  try {
+    // Chain mapping for DexScreener
+    const chainMapping: Record<number, string> = {
+      1: 'ethereum',
+      8453: 'base',
+      42161: 'arbitrum',
+      10: 'optimism',
+      137: 'polygon',
+      56: 'bsc',
+      43114: 'avalanche',
+      324: 'zksync',
+    };
+
+    const chain = chainMapping[token.chainId];
+    if (!chain) {
+      return {
+        liquidityUsd: token.liquidityUsd || 0,
+        isLocked: false,
+        poolAgeDays: 0,
+      };
+    }
+
+    const response = await fetch(
+      `https://api.dexscreener.com/latest/dex/tokens/${token.address}`,
+      {
+        signal: AbortSignal.timeout(TIMEOUTS.API),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('DexScreener API error');
+    }
+
+    const data = await response.json();
+    const pairs = data.pairs || [];
+    
+    // Find the main liquidity pool (highest liquidity)
+    const mainPair = pairs.reduce((max: any, pair: any) => {
+      if (!max || (pair.liquidity?.usd || 0) > (max.liquidity?.usd || 0)) {
+        return pair;
+      }
+      return max;
+    }, null);
+
+    if (!mainPair) {
+      return {
+        liquidityUsd: 0,
+        isLocked: false,
+        poolAgeDays: 0,
+        volume24h: 0,
+        priceChange24h: 0,
+      };
+    }
+
+    // Calculate pool age
+    const pairCreatedAt = mainPair.pairCreatedAt ? new Date(mainPair.pairCreatedAt) : null;
+    const poolAgeDays = pairCreatedAt 
+      ? Math.floor((Date.now() - pairCreatedAt.getTime()) / (1000 * 60 * 60 * 24))
+      : 0;
+
+    return {
+      liquidityUsd: mainPair.liquidity?.usd || 0,
+      isLocked: false, // DexScreener doesn't provide this directly
+      poolAgeDays,
+      volume24h: mainPair.volume?.h24 || 0,
+      priceChange24h: mainPair.priceChange?.h24 || 0,
+      fdv: mainPair.fdv || 0,
+      txns24h: mainPair.txns?.h24 || { buys: 0, sells: 0 },
+    };
+  } catch (error) {
+    logger.warn({ error, token: token.address }, 'DexScreener fetch failed');
+    return {
+      liquidityUsd: token.liquidityUsd || 0,
+      isLocked: false,
+      poolAgeDays: 0,
+    };
+  }
+}
+
+/**
+ * Fetch holder data from GoPlus (already included in security data)
  */
 async function fetchHolderData(token: TokenHolding): Promise<any> {
-  return {
-    holderCount: 0,
-    topHolderPercentage: 0,
-    totalSupply: '0',
-    circulatingSupply: '0',
-  };
+  try {
+    const response = await fetch(
+      `${env.NEXT_PUBLIC_GOPLUS_API_URL}/token_security/${token.chainId}?contract_addresses=${token.address}`,
+      {
+        signal: AbortSignal.timeout(TIMEOUTS.API),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('GoPlus holder data error');
+    }
+
+    const data = await response.json();
+    const tokenData = data.result?.[token.address.toLowerCase()] || {};
+
+    return {
+      holderCount: parseInt(tokenData.holder_count || '0'),
+      topHolderPercentage: parseFloat(tokenData.top_10_holder_percent || '0') * 100,
+      totalSupply: tokenData.total_supply || '0',
+      circulatingSupply: tokenData.total_supply || '0', // GoPlus doesn't provide circulating
+      creatorPercentage: parseFloat(tokenData.creator_percent || '0') * 100,
+      ownerPercentage: parseFloat(tokenData.owner_percent || '0') * 100,
+    };
+  } catch (error) {
+    logger.warn({ error, token: token.address }, 'Holder data fetch failed');
+    return {
+      holderCount: 0,
+      topHolderPercentage: 0,
+      totalSupply: '0',
+      circulatingSupply: '0',
+    };
+  }
 }
 
 /**

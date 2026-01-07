@@ -136,7 +136,8 @@ export async function createConsolidationPlan(
 }
 
 /**
- * Find best swap route across multiple routers
+ * Find best swap route across multiple routers (1inch, 0x, Curve, Balancer)
+ * Uses real APIs for mainnet production
  */
 async function findBestRoute(
   fromToken: TokenHolding,
@@ -148,50 +149,101 @@ async function findBestRoute(
 
   logger.debug(
     { fromToken: fromToken.address, toToken, chainId },
-    'Finding best route'
+    'Finding best route across all DEXes'
   );
 
   // Get quotes from all routers in parallel
-  const quotes = await Promise.allSettled([
+  const quotePromises = [
+    // 1inch - Primary aggregator
     oneInch.getQuote({
       chainId,
       fromToken: fromToken.address,
       toToken,
       amount: amountIn,
       fromAddress: walletAddress,
-    }),
-    // uniswapV4.getQuote({ chainId, fromToken: fromToken.address, toToken, amount: amountIn }),
-    // curve.getQuote({ chainId, fromToken: fromToken.address, toToken, amount: amountIn }),
-    // balancer.getQuote({ chainId, fromToken: fromToken.address, toToken, amount: amountIn }),
-  ]);
+    }).catch(e => ({ error: e, router: '1inch' })),
+    
+    // 0x/Uniswap - Secondary aggregator
+    uniswapV4.getQuote({
+      chainId,
+      fromToken: fromToken.address,
+      toToken,
+      amount: amountIn,
+      fromAddress: walletAddress,
+    }).catch(e => ({ error: e, router: 'uniswap_v4' })),
+    
+    // Curve - Stablecoin specialist
+    curve.getQuote({
+      chainId,
+      fromToken: fromToken.address,
+      toToken,
+      amount: amountIn,
+    }).catch(e => ({ error: e, router: 'curve' })),
+    
+    // Balancer - Multi-token pools
+    balancer.getQuote({
+      chainId,
+      fromToken: fromToken.address,
+      toToken,
+      amount: amountIn,
+    }).catch(e => ({ error: e, router: 'balancer' })),
+  ];
 
-  // Find best quote (highest output, lowest gas)
+  const quotes = await Promise.all(quotePromises);
+
+  // Find best quote (highest net output after gas)
   let bestQuote: SwapRoute | null = null;
-  let bestScore = 0;
+  let bestNetOutput = 0;
 
-  quotes.forEach((result, index) => {
-    if (result.status === 'fulfilled') {
-      const quote = result.value;
-      const outputValue = parseFloat(quote.amountOut);
-      const gasValue = parseFloat(quote.estimatedGas);
-      
-      // Score = output / (gas * 0.01) - simple heuristic
-      const score = outputValue / (gasValue * 0.01);
+  quotes.forEach((result: any) => {
+    // Skip failed quotes
+    if (result.error) {
+      logger.debug({ router: result.router, error: result.error?.message }, 'Quote failed');
+      return;
+    }
 
-      if (score > bestScore) {
-        bestScore = score;
-        bestQuote = {
-          router: quote.router as any,
-          fromToken,
-          toToken,
-          amountIn,
-          expectedOut: quote.amountOut,
-          estimatedGas: quote.estimatedGas,
-          priceImpact: quote.priceImpact,
-        };
-      }
+    const quote = result;
+    const outputValue = parseFloat(quote.amountOut || '0');
+    const gasValue = parseFloat(quote.estimatedGas || '0');
+    
+    // Calculate net output (output - estimated gas cost in USD)
+    // Assume ~$0.01 per 1000 gas on Base
+    const gasCostUsd = (gasValue / 1000) * 0.01;
+    const netOutput = outputValue - gasCostUsd;
+
+    logger.debug({
+      router: quote.router,
+      amountOut: quote.amountOut,
+      estimatedGas: quote.estimatedGas,
+      netOutput: netOutput.toFixed(8),
+    }, 'Router quote received');
+
+    if (netOutput > bestNetOutput) {
+      bestNetOutput = netOutput;
+      bestQuote = {
+        router: quote.router,
+        fromToken,
+        toToken,
+        amountIn,
+        expectedOut: quote.amountOut,
+        estimatedGas: quote.estimatedGas,
+        priceImpact: quote.priceImpact || 0,
+      };
     }
   });
+
+  if (bestQuote !== null) {
+    const route = bestQuote as SwapRoute;
+    logger.info({
+      router: route.router,
+      fromToken: fromToken.symbol,
+      toToken,
+      expectedOut: route.expectedOut,
+      priceImpact: route.priceImpact,
+    }, 'Best route selected');
+  } else {
+    logger.warn({ fromToken: fromToken.address, toToken }, 'No valid route found');
+  }
 
   return bestQuote;
 }
