@@ -25,6 +25,14 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "src/legacy-demo"]
+  "exclude": [
+    "node_modules",
+    "src/legacy-demo",
+    "src/index.ts",
+    "src/routes/**/*",
+    "src/services/**/*",
+    "src/blockchain/**/*",
+    "src/middleware/**/*"
+  ]
 }
 

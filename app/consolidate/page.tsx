@@ -4,13 +4,13 @@
 
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Consolidate } from '../../src/ui-components/consolidate';
 import { createConsolidation } from '../../src/lib/api';
 
-export default function ConsolidatePage() {
+function ConsolidatePageContent() {
   const { address } = useAccount();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -56,6 +56,18 @@ export default function ConsolidatePage() {
       onExecute={handleExecute}
       onNavigate={(path) => router.push(path)}
     />
+  );
+}
+
+export default function ConsolidatePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
+      </div>
+    }>
+      <ConsolidatePageContent />
+    </Suspense>
   );
 }
 

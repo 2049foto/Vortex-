@@ -16,32 +16,52 @@ export const supportedChains = [
   polygon,
 ] as const;
 
-// Wagmi configuration
-export const wagmiConfig = createConfig({
-  chains: supportedChains,
-  connectors: [
+// Connectors - only initialize on client
+const getConnectors = () => {
+  // Skip WalletConnect on server to avoid indexedDB error
+  if (typeof window === 'undefined') {
+    return [
+      coinbaseWallet({
+        appName: 'Vortex Protocol',
+        appLogoUrl: `${process.env.NEXT_PUBLIC_APP_URL || ''}/logo.png`,
+        preference: {
+          options: 'smartWalletOnly', // Force Smart Wallet
+        },
+      }),
+    ];
+  }
+
+  return [
     coinbaseWallet({
       appName: 'Vortex Protocol',
-      appLogoUrl: `${process.env.NEXT_PUBLIC_APP_URL}/logo.png`,
-      preference: 'smartWalletOnly', // Force Smart Wallet
+      appLogoUrl: `${process.env.NEXT_PUBLIC_APP_URL || ''}/logo.png`,
+      preference: {
+        options: 'smartWalletOnly', // Force Smart Wallet
+      },
     }),
     walletConnect({
-      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
+      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'default-project-id',
       metadata: {
         name: 'Vortex Protocol',
         description: 'Premium Portfolio Hygiene Engine',
-        url: process.env.NEXT_PUBLIC_APP_URL!,
-        icons: [`${process.env.NEXT_PUBLIC_APP_URL}/logo.png`],
+        url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+        icons: [`${process.env.NEXT_PUBLIC_APP_URL || ''}/logo.png`],
       },
       showQrModal: true,
     }),
-  ],
+  ];
+};
+
+// Wagmi configuration
+export const wagmiConfig = createConfig({
+  chains: supportedChains,
+  connectors: getConnectors(),
   transports: {
-    [base.id]: http(process.env.NEXT_PUBLIC_BASE_RPC_URL),
-    [mainnet.id]: http(process.env.NEXT_PUBLIC_MAINNET_RPC_URL),
-    [arbitrum.id]: http(process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL),
-    [optimism.id]: http(process.env.NEXT_PUBLIC_OPTIMISM_RPC_URL),
-    [polygon.id]: http(process.env.NEXT_PUBLIC_POLYGON_RPC_URL),
+    [base.id]: http(process.env.NEXT_PUBLIC_BASE_RPC_URL || 'https://mainnet.base.org'),
+    [mainnet.id]: http(process.env.NEXT_PUBLIC_MAINNET_RPC_URL || 'https://eth.llamarpc.com'),
+    [arbitrum.id]: http(process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL || 'https://arb1.arbitrum.io/rpc'),
+    [optimism.id]: http(process.env.NEXT_PUBLIC_OPTIMISM_RPC_URL || 'https://mainnet.optimism.io'),
+    [polygon.id]: http(process.env.NEXT_PUBLIC_POLYGON_RPC_URL || 'https://polygon-rpc.com'),
   },
   ssr: true,
 });

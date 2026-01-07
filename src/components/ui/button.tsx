@@ -1,6 +1,5 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { motion } from "framer-motion"
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive' | 'glass' | 'iridescent' | 'soft' | 'neo' | 'premium';
@@ -36,8 +35,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     return (
-      <motion.button
-        whileTap={{ scale: 0.97 }}
+      <button
         className={cn(baseStyles, variants[variant], sizes[size], className)}
         ref={ref}
         disabled={isLoading || props.disabled}
@@ -57,7 +55,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
         ) : null}
         <span className="relative z-20 flex items-center gap-2">{children}</span>
-      </motion.button>
+      </button>
     )
   }
 )

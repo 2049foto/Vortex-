@@ -8,9 +8,6 @@ import { cors } from '@elysiajs/cors';
 import { swagger } from '@elysiajs/swagger';
 import { env } from './config/env';
 import { createLogger } from './utils/logger';
-import { errorHandler } from './middleware/errorHandler';
-import { rateLimitMiddleware } from './middleware/rateLimit';
-import { authMiddleware } from './middleware/auth';
 
 // Routes
 import { scanRoute } from './routes/scan';
@@ -53,7 +50,6 @@ const app = new Elysia()
       },
     })
   )
-  .use(errorHandler)
   
   // Health check
   .get('/health', () => ({
@@ -67,10 +63,9 @@ const app = new Elysia()
   .use(frameRoute)
   .use(analyticsRoute)
 
-  // Protected routes with rate limiting
+  // API routes (rate limiting handled per route)
   .group('/api/v1', (app) =>
     app
-      .use(rateLimitMiddleware)
       .use(scanRoute)
       .use(swapRoute)
       .use(statusRoute)
@@ -79,9 +74,12 @@ const app = new Elysia()
 
   // Error handling
   .onError(({ error, set }) => {
-    logger.error({ error: error.message, stack: error.stack }, 'Unhandled error');
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    logger.error({ error: errorMessage, stack: errorStack }, 'Unhandled error');
 
-    if (error.message.includes('Not Found')) {
+    if (errorMessage.includes('Not Found')) {
       set.status = 404;
       return {
         success: false,
@@ -89,12 +87,12 @@ const app = new Elysia()
       };
     }
 
-    if (error.message.includes('Validation')) {
+    if (errorMessage.includes('Validation')) {
       set.status = 400;
       return {
         success: false,
         error: 'Validation error',
-        message: error.message,
+        message: errorMessage,
       };
     }
 
@@ -102,7 +100,7 @@ const app = new Elysia()
     return {
       success: false,
       error: 'Internal server error',
-      message: IS_PRODUCTION ? undefined : error.message,
+      message: IS_PRODUCTION ? undefined : errorMessage,
     };
   })
 

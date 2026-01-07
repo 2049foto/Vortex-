@@ -4,13 +4,13 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getConsolidationStatus } from '../../src/lib/api';
 import { Card } from '../../src/components/ui/card';
 import { Button } from '../../src/components/ui/button';
 
-export default function SuccessPage() {
+function SuccessPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const requestId = searchParams.get('requestId');
@@ -131,6 +131,21 @@ export default function SuccessPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function SuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card className="max-w-md p-6 text-center">
+          <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent mx-auto"></div>
+          <h2 className="mb-2 text-xl font-bold">Loading...</h2>
+        </Card>
+      </div>
+    }>
+      <SuccessPageContent />
+    </Suspense>
   );
 }
 
