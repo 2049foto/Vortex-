@@ -12,6 +12,10 @@ import { Navbar } from '@/components/layout/navbar';
 import { WalletModal } from '@/components/wallet/wallet-modal';
 import { BottomNav } from '@/components/layout/bottom-nav';
 
+// Force dynamic rendering to prevent pre-rendering issues with Wagmi
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function AppLayout({
   children,
 }: {
