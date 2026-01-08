@@ -10,6 +10,10 @@ import { useAccount } from 'wagmi';
 import { Landing } from '@/ui-components/landing';
 import { WalletModal } from '@/components/wallet/wallet-modal';
 
+// Force dynamic rendering to prevent pre-rendering issues with Wagmi
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function HomePage() {
   const router = useRouter();
   const { address, isConnected } = useAccount();
