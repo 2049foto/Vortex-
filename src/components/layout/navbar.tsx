@@ -83,10 +83,10 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
               <Button 
                 variant="ghost" 
                 size="sm"
-                className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 h-9 px-3 rounded-lg"
+                className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 h-9 px-3 rounded-lg transition-colors"
               >
                 <BarChart3 className="w-4 h-4 mr-1.5" />
-                <span className="text-sm">Metrics</span>
+                <span className="text-sm font-medium">Metrics</span>
               </Button>
             </Link>
 
@@ -95,7 +95,7 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
               onClick={onConnect}
               size="sm"
               className={cn(
-                "h-9 rounded-xl font-medium transition-all",
+                "h-9 rounded-xl font-semibold transition-all shadow-sm",
                 isConnected 
                   ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-0" 
                   : "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md shadow-indigo-500/20"

@@ -71,11 +71,28 @@ export async function verifyTurnstileToken(
 
 /**
  * Turnstile middleware for protected endpoints
+ * Fail-open if Turnstile is not configured (development mode)
  */
 export async function requireTurnstile(
   token: string,
   remoteIp?: string
 ): Promise<void> {
+  // If Turnstile is not configured, allow request (fail-open for development)
+  if (!env.TURNSTILE_SECRET_KEY) {
+    logger.warn('TURNSTILE_SECRET_KEY not configured, allowing request (fail-open)');
+    return;
+  }
+
+  // If no token provided but Turnstile is configured, fail
+  if (!token || token.trim() === '') {
+    // In production, this should fail. In development, we can be lenient
+    if (env.NODE_ENV === 'production') {
+      throw new Error('Turnstile token is required');
+    }
+    logger.warn('No Turnstile token provided, allowing request (development mode)');
+    return;
+  }
+
   const result = await verifyTurnstileToken(token, remoteIp);
   
   if (!result.success) {

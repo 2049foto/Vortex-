@@ -45,17 +45,22 @@ export const supportedChains = [
 // Connectors - only initialize on client
 const getConnectors = () => {
   const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '69915bbd15f146b792917c4f1a657139';
+  
   // Use current origin for WalletConnect metadata to avoid URL mismatch
+  // Always use the same origin to prevent verification errors
   const appUrl = typeof window !== 'undefined' 
     ? window.location.origin 
-    : process.env.NEXT_PUBLIC_APP_URL || 'https://dust-sweeper-yrjq.vercel.app';
+    : (process.env.NEXT_PUBLIC_APP_URL || 'https://dust-sweeper-yrjq.vercel.app');
+  
+  // Ensure URL is consistent and doesn't include trailing slash
+  const cleanUrl = appUrl.replace(/\/$/, '');
   
   // Skip WalletConnect on server to avoid indexedDB error
   if (typeof window === 'undefined') {
     return [
       coinbaseWallet({
         appName: 'Vortex Protocol',
-        appLogoUrl: `${appUrl}/logo.png`,
+        appLogoUrl: `${cleanUrl}/logo.png`,
       }),
     ];
   }
@@ -68,18 +73,23 @@ const getConnectors = () => {
     // Coinbase Wallet (supports Smart Wallet)
     coinbaseWallet({
       appName: 'Vortex Protocol',
-      appLogoUrl: `${appUrl}/logo.png`,
+      appLogoUrl: `${cleanUrl}/logo.png`,
     }),
     // WalletConnect for mobile wallets
+    // Use consistent URL to avoid origin mismatch
     walletConnect({
       projectId,
       metadata: {
         name: 'Vortex Protocol',
         description: 'Premium Portfolio Hygiene Engine - Gasless consolidator for Base',
-        url: appUrl,
-        icons: [`${appUrl}/logo.png`],
+        url: cleanUrl,
+        icons: [`${cleanUrl}/logo.png`],
       },
       showQrModal: true,
+      // Disable wallet connect verification to avoid origin mismatch
+      qrModalOptions: {
+        themeMode: 'light',
+      },
     }),
   ];
 };

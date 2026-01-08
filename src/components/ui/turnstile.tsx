@@ -51,6 +51,11 @@ export function Turnstile({
   const widgetIdRef = useRef<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // Don't render if siteKey is empty
+  if (!siteKey || siteKey.trim() === '') {
+    return null;
+  }
+
   const loadScript = useCallback(() => {
     if (document.querySelector('script[src*="turnstile"]')) {
       setIsLoaded(true);
@@ -62,34 +67,52 @@ export function Turnstile({
     script.async = true;
     script.defer = true;
     script.onload = () => setIsLoaded(true);
+    script.onerror = () => {
+      console.warn('Failed to load Turnstile script');
+      setIsLoaded(false);
+    };
     document.head.appendChild(script);
   }, []);
 
   useEffect(() => {
+    if (!siteKey || siteKey.trim() === '') return;
     loadScript();
-  }, [loadScript]);
+  }, [loadScript, siteKey]);
 
   useEffect(() => {
-    if (!isLoaded || !containerRef.current || !window.turnstile) return;
+    if (!isLoaded || !containerRef.current || !window.turnstile || !siteKey || siteKey.trim() === '') return;
 
     // Clean up existing widget
     if (widgetIdRef.current) {
-      window.turnstile.remove(widgetIdRef.current);
+      try {
+        window.turnstile.remove(widgetIdRef.current);
+      } catch (e) {
+        // Ignore cleanup errors
+      }
     }
 
-    // Render new widget
-    widgetIdRef.current = window.turnstile.render(containerRef.current, {
-      sitekey: siteKey,
-      callback: onVerify,
-      'error-callback': onError,
-      'expired-callback': onExpire,
-      theme,
-      size,
-    });
+    try {
+      // Render new widget
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        callback: onVerify,
+        'error-callback': onError,
+        'expired-callback': onExpire,
+        theme,
+        size,
+      });
+    } catch (error) {
+      console.error('Turnstile render error:', error);
+      onError?.();
+    }
 
     return () => {
       if (widgetIdRef.current && window.turnstile) {
-        window.turnstile.remove(widgetIdRef.current);
+        try {
+          window.turnstile.remove(widgetIdRef.current);
+        } catch (e) {
+          // Ignore cleanup errors
+        }
       }
     };
   }, [isLoaded, siteKey, onVerify, onError, onExpire, theme, size]);

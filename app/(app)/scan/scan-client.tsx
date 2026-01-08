@@ -72,13 +72,16 @@ export function ScanPageClient() {
         onNavigate={(path) => router.push(path)}
       />
 
-      {/* Turnstile widget (hidden, for bot protection) */}
-      <div className="hidden">
-        <Turnstile
-          siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ''}
-          onVerify={(token) => setTurnstileToken(token)}
-        />
-      </div>
+      {/* Turnstile widget (hidden, for bot protection) - Only render if siteKey exists */}
+      {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
+        <div className="hidden">
+          <Turnstile
+            siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+            onVerify={(token) => setTurnstileToken(token)}
+            onError={() => console.warn('Turnstile verification failed')}
+          />
+        </div>
+      )}
     </>
   );
 }
