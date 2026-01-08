@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { DashboardCharts } from './components/DashboardCharts';
 
 // Default stats when no history
 const DEFAULT_STATS = {
@@ -116,6 +117,17 @@ export function Dashboard({ address, history, isLoading, error, onNavigate }: Da
           iconBg="bg-orange-100 text-orange-600"
           label="Streak"
           value={`${stats.streak || 0} days`}
+        />
+      </div>
+
+      {/* Analytics Charts */}
+      <div className="mb-6">
+        <DashboardCharts 
+          gasMetrics={{
+            totalSaved: stats.baseTVLAdded || 0,
+            thisMonth: (stats.baseTVLAdded || 0) * 0.3,
+            trend: 12.5,
+          }}
         />
       </div>
 

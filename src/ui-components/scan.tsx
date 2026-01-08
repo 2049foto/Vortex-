@@ -11,10 +11,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, RefreshCw, ArrowRight, ArrowLeft, 
   CheckCircle2, AlertTriangle, Sparkles, Filter,
-  ChevronDown, ExternalLink, Info, Layers, X
+  ChevronDown, ExternalLink, Info, Layers, X, Shield
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { RiskBreakdownModal } from './components/RiskBreakdownModal';
 
 // Types
 interface Asset {
@@ -62,6 +63,7 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
   const [selectedChains, setSelectedChains] = useState<Set<number>>(new Set([8453, 1, 42161, 10, 137]));
   const [assets, setAssets] = useState<Asset[]>([]);
   const [showChainFilter, setShowChainFilter] = useState(false);
+  const [selectedAssetForRisk, setSelectedAssetForRisk] = useState<Asset | null>(null);
 
   // Scanning animation
   useEffect(() => {
@@ -417,6 +419,7 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
                     isSelected={selectedTokens.has(asset.id)}
                     onToggle={() => handleToggleToken(asset.id)}
                     isRisk={asset.tier === 'RISK_SCAM'}
+                    onShowRisk={() => setSelectedAssetForRisk(asset)}
                   />
                 </motion.div>
               ))
@@ -479,6 +482,21 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
           </div>
         </div>
       </motion.div>
+
+      {/* Risk Breakdown Modal */}
+      <RiskBreakdownModal
+        isOpen={!!selectedAssetForRisk}
+        onClose={() => setSelectedAssetForRisk(null)}
+        token={selectedAssetForRisk ? {
+          symbol: selectedAssetForRisk.symbol,
+          name: selectedAssetForRisk.name,
+          address: selectedAssetForRisk.contractAddress,
+          chainId: selectedAssetForRisk.chainId,
+          logoUrl: selectedAssetForRisk.logoUrl,
+          riskScore: selectedAssetForRisk.riskScore,
+          tier: selectedAssetForRisk.tier,
+        } : null}
+      />
     </div>
   );
 }
@@ -488,44 +506,48 @@ function TokenCard({
   asset, 
   isSelected, 
   onToggle,
-  isRisk 
+  isRisk,
+  onShowRisk
 }: { 
   asset: Asset;
   isSelected: boolean;
   onToggle: () => void;
   isRisk: boolean;
+  onShowRisk?: () => void;
 }) {
   const chain = CHAINS[asset.chainId];
 
   return (
-    <button
-      onClick={isRisk ? undefined : onToggle}
-      disabled={isRisk}
+    <div
       className={cn(
-        "w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left",
+        "w-full flex items-center gap-3 p-3 rounded-xl border transition-all",
         isRisk 
-          ? "bg-red-50/50 border-red-100 cursor-not-allowed" 
+          ? "bg-red-50/50 border-red-100" 
           : isSelected 
             ? "bg-indigo-50 border-indigo-200" 
             : "bg-white border-slate-200 hover:border-slate-300"
       )}
     >
       {/* Checkbox */}
-      <div className={cn(
-        "w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors",
-        isRisk 
-          ? "border-red-300 bg-red-100" 
-          : isSelected 
-            ? "border-indigo-600 bg-indigo-600" 
-            : "border-slate-300"
-      )}>
+      <button
+        onClick={isRisk ? undefined : onToggle}
+        disabled={isRisk}
+        className={cn(
+          "w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors",
+          isRisk 
+            ? "border-red-300 bg-red-100 cursor-not-allowed" 
+            : isSelected 
+              ? "border-indigo-600 bg-indigo-600 cursor-pointer" 
+              : "border-slate-300 cursor-pointer hover:border-slate-400"
+        )}
+      >
         {isSelected && !isRisk && (
           <CheckCircle2 className="w-3.5 h-3.5 text-white" />
         )}
         {isRisk && (
           <X className="w-3 h-3 text-red-500" />
         )}
-      </div>
+      </button>
 
       {/* Token Icon */}
       <div className="relative flex-shrink-0">
@@ -565,6 +587,15 @@ function TokenCard({
         <span className="text-xs text-slate-500 truncate block">{asset.name}</span>
       </div>
 
+      {/* Risk Score Button */}
+      <button
+        onClick={onShowRisk}
+        className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors text-xs font-medium text-slate-600"
+      >
+        <Shield className="w-3 h-3" />
+        {asset.riskScore || 35}
+      </button>
+
       {/* Value */}
       <div className="text-right flex-shrink-0">
         <div className={cn(
@@ -575,7 +606,7 @@ function TokenCard({
         </div>
         <div className="text-xs text-slate-500">{parseFloat(asset.balance).toFixed(4)}</div>
       </div>
-    </button>
+    </div>
   );
 }
 
