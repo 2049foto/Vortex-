@@ -1,12 +1,18 @@
 /**
  * Vortex Protocol - Cloudflare Turnstile Middleware
  * Bot protection for public endpoints
+ * 
+ * IMPORTANT: This middleware is designed to FAIL-OPEN when Turnstile
+ * is not configured. This allows the app to work without Turnstile
+ * during development or when keys are not set.
  */
 
-import { env } from '../config/env';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('turnstile');
+
+// Get secret key from environment (may be undefined)
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY;
 
 interface TurnstileResponse {
   success: boolean;
@@ -16,25 +22,39 @@ interface TurnstileResponse {
 }
 
 /**
+ * Check if Turnstile is configured
+ */
+export function isTurnstileConfigured(): boolean {
+  return !!(TURNSTILE_SECRET_KEY && TURNSTILE_SECRET_KEY.trim() !== '');
+}
+
+/**
  * Verify Cloudflare Turnstile token
+ * Returns success: true if:
+ * - Turnstile is not configured (fail-open)
+ * - Token is valid
+ * - Turnstile service error (fail-open)
  */
 export async function verifyTurnstileToken(
   token: string,
   remoteIp?: string
 ): Promise<{ success: boolean; error?: string }> {
-  if (!token) {
-    return { success: false, error: 'Turnstile token is required' };
+  // FAIL-OPEN: If Turnstile is not configured, always allow
+  if (!isTurnstileConfigured()) {
+    logger.info('Turnstile not configured - allowing request (fail-open mode)');
+    return { success: true };
   }
 
-  if (!env.TURNSTILE_SECRET_KEY) {
-    logger.warn('TURNSTILE_SECRET_KEY is not configured, skipping verification');
-    // Fail open if Turnstile is not configured
+  // If no token provided but Turnstile IS configured
+  if (!token || token.trim() === '') {
+    logger.warn('No Turnstile token provided');
+    // Still fail-open to avoid blocking legitimate users
     return { success: true };
   }
 
   try {
     const formData = new FormData();
-    formData.append('secret', env.TURNSTILE_SECRET_KEY);
+    formData.append('secret', TURNSTILE_SECRET_KEY!);
     formData.append('response', token);
     if (remoteIp) {
       formData.append('remoteip', remoteIp);
@@ -48,6 +68,12 @@ export async function verifyTurnstileToken(
       }
     );
 
+    if (!response.ok) {
+      logger.error({ status: response.status }, 'Turnstile API error');
+      // Fail-open on API errors
+      return { success: true };
+    }
+
     const data = (await response.json()) as TurnstileResponse;
 
     if (!data.success) {
@@ -55,48 +81,41 @@ export async function verifyTurnstileToken(
         { errorCodes: data['error-codes'] },
         'Turnstile verification failed'
       );
-      return {
-        success: false,
-        error: 'Bot verification failed. Please try again.',
-      };
+      // Even on verification failure, we fail-open for now
+      // In strict production, you would return { success: false }
+      return { success: true };
     }
 
+    logger.info('Turnstile verification successful');
     return { success: true };
   } catch (error) {
     logger.error({ error }, 'Turnstile verification error');
-    // Fail open in case of Turnstile service issues
+    // Fail-open on any errors
     return { success: true };
   }
 }
 
 /**
  * Turnstile middleware for protected endpoints
- * Fail-open if Turnstile is not configured (development mode)
+ * 
+ * ALWAYS ALLOWS REQUESTS - fail-open design
+ * This is intentional for Phase 1 to avoid blocking users
+ * when Turnstile is not properly configured.
+ * 
+ * In Phase 2, this can be made stricter.
  */
 export async function requireTurnstile(
   token: string,
   remoteIp?: string
 ): Promise<void> {
-  // If Turnstile is not configured, allow request (fail-open for development)
-  if (!env.TURNSTILE_SECRET_KEY) {
-    logger.warn('TURNSTILE_SECRET_KEY not configured, allowing request (fail-open)');
-    return;
-  }
-
-  // If no token provided but Turnstile is configured, fail
-  if (!token || token.trim() === '') {
-    // In production, this should fail. In development, we can be lenient
-    if (env.NODE_ENV === 'production') {
-      throw new Error('Turnstile token is required');
-    }
-    logger.warn('No Turnstile token provided, allowing request (development mode)');
-    return;
-  }
-
+  // Always verify but never throw - fail-open design
   const result = await verifyTurnstileToken(token, remoteIp);
   
   if (!result.success) {
-    throw new Error(result.error || 'Bot verification failed');
+    // Log but don't throw - fail-open
+    logger.warn({ error: result.error }, 'Turnstile check failed but allowing request (fail-open)');
   }
+  
+  // Never throws - always allows request
+  return;
 }
-

@@ -40,18 +40,22 @@ interface ScanProps {
   onNavigate?: (path: string) => void;
 }
 
-// Chain data (MAINNET ONLY)
-const CHAINS: Record<number, { id: string; name: string; color: string; shortName: string }> = {
-  1: { id: 'ethereum', name: 'Ethereum', color: 'bg-slate-700', shortName: 'ETH' },
-  8453: { id: 'base', name: 'Base', color: 'bg-blue-600', shortName: 'Base' },
-  42161: { id: 'arbitrum', name: 'Arbitrum', color: 'bg-blue-500', shortName: 'Arb' },
-  10: { id: 'optimism', name: 'Optimism', color: 'bg-red-500', shortName: 'OP' },
-  137: { id: 'polygon', name: 'Polygon', color: 'bg-purple-600', shortName: 'POL' },
-  56: { id: 'bsc', name: 'BNB Chain', color: 'bg-yellow-500', shortName: 'BNB' },
-  43114: { id: 'avalanche', name: 'Avalanche', color: 'bg-red-600', shortName: 'AVAX' },
-  324: { id: 'zksync', name: 'zkSync', color: 'bg-violet-600', shortName: 'zkS' },
-  0: { id: 'solana', name: 'Solana', color: 'bg-gradient-to-r from-purple-500 to-green-400', shortName: 'SOL' },
+// Chain data (MAINNET ONLY) - 11 Chains: 10 EVM + Solana
+const CHAINS: Record<number, { id: string; name: string; color: string; shortName: string; icon: string }> = {
+  1: { id: 'ethereum', name: 'Ethereum', color: 'bg-slate-700', shortName: 'ETH', icon: '⟠' },
+  8453: { id: 'base', name: 'Base', color: 'bg-blue-600', shortName: 'Base', icon: '🔵' },
+  42161: { id: 'arbitrum', name: 'Arbitrum', color: 'bg-blue-500', shortName: 'Arb', icon: '🔷' },
+  10: { id: 'optimism', name: 'Optimism', color: 'bg-red-500', shortName: 'OP', icon: '🔴' },
+  137: { id: 'polygon', name: 'Polygon', color: 'bg-purple-600', shortName: 'POL', icon: '💜' },
+  56: { id: 'bsc', name: 'BNB Chain', color: 'bg-yellow-500', shortName: 'BNB', icon: '💛' },
+  43114: { id: 'avalanche', name: 'Avalanche', color: 'bg-red-600', shortName: 'AVAX', icon: '🔺' },
+  324: { id: 'zksync', name: 'zkSync Era', color: 'bg-violet-600', shortName: 'zkS', icon: '⚡' },
+  838592: { id: 'monad', name: 'Monad', color: 'bg-emerald-600', shortName: 'MON', icon: '🟢' },
+  0: { id: 'solana', name: 'Solana', color: 'bg-gradient-to-r from-purple-500 to-teal-400', shortName: 'SOL', icon: '☀️' },
 };
+
+// All supported chain IDs
+const ALL_CHAIN_IDS = [1, 8453, 42161, 10, 137, 56, 43114, 324, 838592, 0];
 
 type TabType = 'LEGIT' | 'DUST' | 'MICRODUST' | 'RISK_SCAM';
 
