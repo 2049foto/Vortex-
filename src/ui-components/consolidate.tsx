@@ -1,33 +1,113 @@
 /**
  * Consolidate Component for VORTEX PROTOCOL
- * Output token selection, route picker, stepper progress
+ * Premium consolidation flow with step-by-step progress
  */
 
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Check, Wallet, RefreshCw, Shield, Zap, ChevronDown } from 'lucide-react';
-import { Button } from './components/ui/Button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './components/ui/Card';
-import { Badge } from './components/ui/Badge';
-import { Stepper, StepperMini } from './components/Stepper';
-import { ShareButtons } from './components/ShareButtons';
-import { OutputToken, ConsolidationRoute, ConsolidationStep, Asset } from './types';
-import { cn } from './utils/cn';
+import { 
+  ArrowLeft, ArrowRight, Check, Wallet, RefreshCw, Shield, 
+  Zap, ChevronDown, ExternalLink, Sparkles, TrendingUp,
+  AlertCircle, Copy, CheckCircle2, X, Clock, Loader2
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
-// Default routes (will be replaced with real API data)
-const DEFAULT_ROUTES: ConsolidationRoute[] = [
-  { id: 'best', name: '1inch Aggregator', estimatedOutput: '0.00', estimatedGas: '$0.00', priceImpact: 0.1, isRecommended: true },
-  { id: 'uniswap', name: 'Uniswap V4', estimatedOutput: '0.00', estimatedGas: '$0.00', priceImpact: 0.2, isRecommended: false },
-  { id: 'curve', name: 'Curve', estimatedOutput: '0.00', estimatedGas: '$0.00', priceImpact: 0.15, isRecommended: false },
-];
+// Types
+interface Asset {
+  id: string;
+  name: string;
+  symbol: string;
+  balance: string;
+  valueUSD: number;
+  chainId: number;
+  contractAddress: string;
+  tier: string;
+  logoUrl?: string;
+}
+
+interface ConsolidationRoute {
+  id: string;
+  name: string;
+  estimatedOutput: string;
+  estimatedGas: string;
+  priceImpact: number;
+  isRecommended: boolean;
+  logo?: string;
+}
+
+interface ConsolidationStep {
+  id: string;
+  label: string;
+  description: string;
+  status: 'pending' | 'in-progress' | 'complete' | 'error';
+  txHash?: string;
+}
+
+type OutputToken = 'ETH' | 'USDC';
+type ConsolidationPhase = 'configure' | 'review' | 'executing' | 'complete';
+
+// Router logos
+const ROUTER_LOGOS: Record<string, string> = {
+  'oneinch': '🔄',
+  'uniswap': '🦄',
+  'curve': '🔵',
+  'balancer': '⚖️',
+};
+
+// Default routes
+const generateRoutes = (totalValue: number, outputToken: OutputToken): ConsolidationRoute[] => {
+  const baseOutput = outputToken === 'ETH' 
+    ? (totalValue * 0.995 / 3500).toFixed(6)
+    : (totalValue * 0.995).toFixed(2);
+  
+  return [
+    { 
+      id: 'oneinch', 
+      name: '1inch Aggregator', 
+      estimatedOutput: baseOutput, 
+      estimatedGas: '$0.00', 
+      priceImpact: 0.1, 
+      isRecommended: true,
+      logo: '🔄'
+    },
+    { 
+      id: 'uniswap', 
+      name: 'Uniswap V4', 
+      estimatedOutput: (parseFloat(baseOutput) * 0.995).toFixed(outputToken === 'ETH' ? 6 : 2), 
+      estimatedGas: '$0.00', 
+      priceImpact: 0.2, 
+      isRecommended: false,
+      logo: '🦄'
+    },
+    { 
+      id: 'curve', 
+      name: 'Curve Finance', 
+      estimatedOutput: (parseFloat(baseOutput) * 0.993).toFixed(outputToken === 'ETH' ? 6 : 2), 
+      estimatedGas: '$0.00', 
+      priceImpact: 0.15, 
+      isRecommended: false,
+      logo: '🔵'
+    },
+    { 
+      id: 'balancer', 
+      name: 'Balancer', 
+      estimatedOutput: (parseFloat(baseOutput) * 0.992).toFixed(outputToken === 'ETH' ? 6 : 2), 
+      estimatedGas: '$0.00', 
+      priceImpact: 0.18, 
+      isRecommended: false,
+      logo: '⚖️'
+    },
+  ];
+};
 
 const DEFAULT_STEPS: ConsolidationStep[] = [
-  { id: '1', label: 'Simulating', description: 'Running transaction simulation', status: 'pending' },
-  { id: '2', label: 'Approving', description: 'Token approvals', status: 'pending' },
-  { id: '3', label: 'Executing', description: 'Swapping tokens', status: 'pending' },
-  { id: '4', label: 'Confirming', description: 'Waiting for confirmation', status: 'pending' },
+  { id: '1', label: 'Simulate', description: 'Running Tenderly simulation', status: 'pending' },
+  { id: '2', label: 'Approve', description: 'Token approvals', status: 'pending' },
+  { id: '3', label: 'Execute', description: 'Swapping via 1inch', status: 'pending' },
+  { id: '4', label: 'Confirm', description: 'Waiting for confirmation', status: 'pending' },
 ];
 
 interface ConsolidateProps {
@@ -39,40 +119,46 @@ interface ConsolidateProps {
   onNavigate?: (path: string) => void;
 }
 
-type ConsolidationPhase = 'configure' | 'simulating' | 'executing' | 'complete';
-
 export function Consolidate({ address, tokens = [], isExecuting, error, onExecute, onNavigate }: ConsolidateProps) {
   const totalValue = tokens.reduce((sum, a) => sum + (a.valueUSD || 0), 0);
 
-  // Calculate estimated output based on total value
-  const estimatedOutput = (totalValue * 0.995 / 3500).toFixed(6); // Rough ETH estimation (minus 0.5% slippage)
-  
-  // Generate routes with actual estimates
-  const availableRoutes: ConsolidationRoute[] = DEFAULT_ROUTES.map((route, idx) => ({
-    ...route,
-    estimatedOutput: (parseFloat(estimatedOutput) * (1 - idx * 0.005)).toFixed(6), // Slight variation per route
-  }));
-
   // State
   const [outputToken, setOutputToken] = useState<OutputToken>('ETH');
-  const [selectedRoute, setSelectedRoute] = useState<ConsolidationRoute | null>(availableRoutes[0]);
+  const [availableRoutes, setAvailableRoutes] = useState<ConsolidationRoute[]>([]);
+  const [selectedRoute, setSelectedRoute] = useState<ConsolidationRoute | null>(null);
   const [phase, setPhase] = useState<ConsolidationPhase>('configure');
   const [steps, setSteps] = useState<ConsolidationStep[]>(DEFAULT_STEPS);
   const [currentStep, setCurrentStep] = useState(0);
   const [showRouteDropdown, setShowRouteDropdown] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Update routes when output token changes
+  useEffect(() => {
+    const routes = generateRoutes(totalValue, outputToken);
+    setAvailableRoutes(routes);
+    setSelectedRoute(routes[0]);
+  }, [totalValue, outputToken]);
 
   // Simulation & execution logic
-  const runSimulation = useCallback(async () => {
-    setPhase('simulating');
-
-    // Simulate step progression
+  const runConsolidation = useCallback(async () => {
+    setPhase('executing');
+    
+    const stepDurations = [2000, 1500, 3000, 2000];
+    
     for (let i = 0; i < steps.length; i++) {
       setCurrentStep(i);
       setSteps(prev => prev.map((s, idx) => ({
         ...s,
         status: idx < i ? 'complete' : idx === i ? 'in-progress' : 'pending',
       })));
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      await new Promise(resolve => setTimeout(resolve, stepDurations[i]));
+      
+      // Add mock tx hash at execute step
+      if (i === 2) {
+        setTxHash('0x' + Math.random().toString(16).slice(2, 66));
+      }
     }
 
     // Complete all steps
@@ -81,91 +167,115 @@ export function Consolidate({ address, tokens = [], isExecuting, error, onExecut
   }, [steps.length]);
 
   const handleStartConsolidation = useCallback(async () => {
-    if (!selectedRoute) {
-      return;
-    }
+    if (!selectedRoute) return;
     
-    // If external handler provided, use it
+    setPhase('review');
+  }, [selectedRoute]);
+
+  const handleConfirmConsolidation = useCallback(async () => {
     if (onExecute) {
       const addresses = tokens.map(t => t.contractAddress).filter(Boolean) as string[];
       onExecute(addresses);
     } else {
-      // Otherwise run local simulation
-      runSimulation();
+      runConsolidation();
     }
-  }, [selectedRoute, runSimulation, onExecute, tokens]);
+  }, [runConsolidation, onExecute, tokens]);
 
   const handleCancel = useCallback(() => {
-    if (phase === 'simulating' || phase === 'executing') {
-      setPhase('configure');
-      setSteps(DEFAULT_STEPS);
-      setCurrentStep(0);
+    setPhase('configure');
+    setSteps(DEFAULT_STEPS);
+    setCurrentStep(0);
+    setTxHash(null);
+  }, []);
+
+  const handleCopyTx = useCallback(() => {
+    if (txHash) {
+      navigator.clipboard.writeText(txHash);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
-  }, [phase]);
+  }, [txHash]);
 
   const outputTokenOptions = [
-    { value: 'ETH' as OutputToken, label: 'ETH', icon: '⟠', description: 'Native Ether on Base' },
-    { value: 'USDC' as OutputToken, label: 'USDC', icon: '🔵', description: 'USD Coin on Base' },
+    { value: 'ETH' as OutputToken, label: 'ETH', icon: '⟠', description: 'Native Ether', gradient: 'from-slate-600 to-slate-800' },
+    { value: 'USDC' as OutputToken, label: 'USDC', icon: '💵', description: 'USD Coin', gradient: 'from-blue-500 to-blue-700' },
   ];
 
   // No tokens selected state
   if (tokens.length === 0) {
     return (
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Card className="text-center py-12">
-          <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
-            <Wallet className="w-8 h-8 text-muted-foreground" />
+      <div className="max-w-2xl mx-auto px-4 py-12">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center"
+        >
+          <div className="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center mx-auto mb-6">
+            <Wallet className="w-10 h-10 text-slate-400" />
           </div>
-          <h3 className="text-lg font-semibold text-foreground">No assets selected</h3>
-          <p className="text-muted-foreground mt-2 mb-6">
-            Go back to scan and select assets to consolidate.
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">No Assets Selected</h2>
+          <p className="text-slate-500 mb-8 max-w-sm mx-auto">
+            Go back to scan and select assets to consolidate into ETH or USDC on Base.
           </p>
-          <Button variant="primary" onClick={() => onNavigate && onNavigate('/scan')}>
+          <Button 
+            onClick={() => onNavigate?.('/scan')}
+            className="h-12 px-6 rounded-xl bg-slate-900 hover:bg-slate-800"
+          >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Scan
           </Button>
-        </Card>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Back Button */}
-      {phase === 'configure' && (
-        <button
-          onClick={() => onNavigate && onNavigate('/scan')}
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 min-h-[44px] transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to scan</span>
-        </button>
+    <div className="max-w-2xl mx-auto px-4 py-6">
+      {/* Header */}
+      {(phase === 'configure' || phase === 'review') && (
+        <div className="mb-8">
+          <button
+            onClick={() => phase === 'review' ? setPhase('configure') : onNavigate?.('/scan')}
+            className="flex items-center gap-2 text-slate-500 hover:text-slate-900 mb-4 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>{phase === 'review' ? 'Back to Configure' : 'Back to Scan'}</span>
+          </button>
+          
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">
+            Consolidate Assets
+          </h1>
+          <p className="text-slate-500">
+            {phase === 'configure' 
+              ? `Configure consolidation for ${tokens.length} assets worth $${totalValue.toFixed(2)}`
+              : 'Review and confirm your consolidation'
+            }
+          </p>
+        </div>
       )}
-
-      {/* Page Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
-          {phase === 'complete' ? 'Consolidation Complete!' : 'Consolidate Assets'}
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          {phase === 'complete'
-            ? 'Your portfolio has been cleaned and consolidated.'
-            : `Consolidating ${tokens.length} assets worth $${totalValue.toFixed(2)}`
-          }
-        </p>
-      </div>
 
       {/* Error State */}
       {error && (
-        <Card className="mb-6 bg-destructive/5 border-destructive/20">
-          <CardContent className="py-4">
-            <p className="text-destructive text-sm">{error}</p>
-          </CardContent>
-        </Card>
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-100 flex items-start gap-3"
+        >
+          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-red-700">Error</p>
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+          <button onClick={handleCancel} className="ml-auto text-red-400 hover:text-red-600">
+            <X className="w-5 h-5" />
+          </button>
+        </motion.div>
       )}
 
       <AnimatePresence mode="wait">
-        {/* Configuration Phase */}
+        {/* =============================================
+            PHASE 1: CONFIGURE
+        ============================================= */}
         {phase === 'configure' && (
           <motion.div
             key="configure"
@@ -174,187 +284,240 @@ export function Consolidate({ address, tokens = [], isExecuting, error, onExecut
             exit={{ opacity: 0, y: -20 }}
             className="space-y-6"
           >
-            {/* Selected Assets Summary */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Selected Assets</CardTitle>
-                <CardDescription>
-                  {tokens.length} assets selected for consolidation
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {tokens.slice(0, 5).map(asset => (
-                    <Badge key={asset.id} variant="muted">
-                      {asset.symbol} (${(asset.valueUSD || 0).toFixed(2)})
-                    </Badge>
-                  ))}
-                  {tokens.length > 5 && (
-                    <Badge variant="muted">+{tokens.length - 5} more</Badge>
-                  )}
-                </div>
-                <div className="mt-4 pt-4 border-t border-border flex justify-between">
-                  <span className="text-muted-foreground">Total Value</span>
-                  <span className="font-semibold text-foreground">${totalValue.toFixed(2)}</span>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Selected Assets Preview */}
+            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-slate-900">Selected Assets</h3>
+                <span className="text-sm text-slate-500">{tokens.length} tokens</span>
+              </div>
+              
+              <div className="flex flex-wrap gap-2 mb-4">
+                {tokens.slice(0, 6).map(asset => (
+                  <div 
+                    key={asset.id} 
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100"
+                  >
+                    {asset.logoUrl ? (
+                      <img src={asset.logoUrl} alt={asset.symbol} className="w-4 h-4 rounded-full" />
+                    ) : (
+                      <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center text-[8px] text-white font-bold">
+                        {asset.symbol.slice(0, 1)}
+                      </div>
+                    )}
+                    <span className="text-sm font-medium text-slate-700">{asset.symbol}</span>
+                    <span className="text-xs text-slate-500">${(asset.valueUSD || 0).toFixed(2)}</span>
+                  </div>
+                ))}
+                {tokens.length > 6 && (
+                  <div className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-sm text-slate-500">
+                    +{tokens.length - 6} more
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                <span className="text-slate-500">Total Value</span>
+                <span className="text-xl font-bold text-slate-900">${totalValue.toFixed(2)}</span>
+              </div>
+            </div>
 
             {/* Output Token Selection */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Output Token</CardTitle>
-                <CardDescription>Choose where to consolidate your assets</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  {outputTokenOptions.map(option => (
-                    <button
-                      key={option.value}
-                      onClick={() => setOutputToken(option.value)}
-                      className={cn(
-                        'flex items-center gap-3 p-4 rounded-xl border-2 transition-all min-h-[72px]',
-                        outputToken === option.value
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-muted-foreground'
-                      )}
-                    >
-                      <span className="text-2xl">{option.icon}</span>
-                      <div className="text-left">
-                        <p className="font-semibold text-foreground">{option.label}</p>
-                        <p className="text-sm text-muted-foreground">{option.description}</p>
-                      </div>
-                      {outputToken === option.value && (
-                        <Check className="w-5 h-5 text-primary ml-auto" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Route Selection */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Swap Route</CardTitle>
-                <CardDescription>Select the best route for your consolidation</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="relative">
-                  <button
-                    onClick={() => setShowRouteDropdown(!showRouteDropdown)}
+            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm">
+              <h3 className="font-bold text-slate-900 mb-1">Output Token</h3>
+              <p className="text-sm text-slate-500 mb-4">Choose your destination asset on Base</p>
+              
+              <div className="grid grid-cols-2 gap-3">
+                {outputTokenOptions.map(option => (
+                  <motion.button
+                    key={option.value}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setOutputToken(option.value)}
                     className={cn(
-                      'w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all min-h-[72px]',
-                      showRouteDropdown ? 'border-primary' : 'border-border hover:border-muted-foreground'
+                      'flex items-center gap-3 p-4 rounded-xl border-2 transition-all',
+                      outputToken === option.value
+                        ? 'border-indigo-500 bg-indigo-50 shadow-lg shadow-indigo-100'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
                     )}
                   >
-                    {selectedRoute ? (
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Zap className="w-5 h-5 text-primary" />
-                        </div>
-                        <div className="text-left">
-                          <p className="font-semibold text-foreground">{selectedRoute.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Est. output: {selectedRoute.estimatedOutput} {outputToken}
-                          </p>
-                        </div>
-                        {selectedRoute.isRecommended && (
-                          <Badge variant="success" size="sm">Best</Badge>
+                    <div className={cn(
+                      "w-12 h-12 rounded-xl flex items-center justify-center text-2xl",
+                      `bg-gradient-to-br ${option.gradient}`
+                    )}>
+                      <span className="text-white">{option.icon}</span>
+                    </div>
+                    <div className="text-left flex-1">
+                      <p className="font-bold text-slate-900">{option.label}</p>
+                      <p className="text-sm text-slate-500">{option.description}</p>
+                    </div>
+                    {outputToken === option.value && (
+                      <CheckCircle2 className="w-6 h-6 text-indigo-600" />
+                    )}
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+
+            {/* Route Selection */}
+            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm">
+              <h3 className="font-bold text-slate-900 mb-1">Swap Route</h3>
+              <p className="text-sm text-slate-500 mb-4">Multi-router comparison for best rate</p>
+              
+              <div className="space-y-2">
+                {availableRoutes.map((route, idx) => (
+                  <motion.button
+                    key={route.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    onClick={() => setSelectedRoute(route)}
+                    className={cn(
+                      'w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left',
+                      selectedRoute?.id === route.id
+                        ? 'border-indigo-500 bg-indigo-50 shadow-lg shadow-indigo-100'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    )}
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-xl">
+                      {route.logo}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-900">{route.name}</span>
+                        {route.isRecommended && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
+                            BEST RATE
+                          </span>
                         )}
                       </div>
-                    ) : (
-                      <span className="text-muted-foreground">Select a route</span>
+                      <p className="text-sm text-slate-500">
+                        Est. output: <span className="font-semibold text-slate-900">{route.estimatedOutput} {outputToken}</span>
+                        <span className="text-slate-300 mx-2">•</span>
+                        Impact: {route.priceImpact}%
+                      </p>
+                    </div>
+                    {selectedRoute?.id === route.id && (
+                      <CheckCircle2 className="w-5 h-5 text-indigo-600" />
                     )}
-                    <ChevronDown className={cn('w-5 h-5 text-muted-foreground transition-transform', showRouteDropdown && 'rotate-180')} />
-                  </button>
-
-                  <AnimatePresence>
-                    {showRouteDropdown && (
-                      <>
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          className="fixed inset-0 z-40"
-                          onClick={() => setShowRouteDropdown(false)}
-                        />
-                        <motion.div
-                          initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                          className="absolute left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden"
-                        >
-                          {availableRoutes.map(route => (
-                            <button
-                              key={route.id}
-                              onClick={() => {
-                                setSelectedRoute(route);
-                                setShowRouteDropdown(false);
-                              }}
-                              className={cn(
-                                'w-full flex items-center justify-between p-4 hover:bg-muted transition-colors',
-                                selectedRoute?.id === route.id && 'bg-muted'
-                              )}
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                                  <Zap className="w-4 h-4 text-muted-foreground" />
-                                </div>
-                                <div className="text-left">
-                                  <p className="font-medium text-foreground">{route.name}</p>
-                                  <p className="text-sm text-muted-foreground">
-                                    {route.estimatedOutput} {outputToken}
-                                  </p>
-                                </div>
-                              </div>
-                              {route.isRecommended && (
-                                <Badge variant="success" size="sm">Best Rate</Badge>
-                              )}
-                            </button>
-                          ))}
-                        </motion.div>
-                      </>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </CardContent>
-            </Card>
+                  </motion.button>
+                ))}
+              </div>
+            </div>
 
             {/* Trust Indicators */}
-            <Card variant="glass">
-              <CardContent className="flex flex-wrap items-center justify-center gap-6 py-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Shield className="w-4 h-4 text-accent" />
-                  <span>Simulation via Tenderly</span>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { icon: Shield, label: 'Simulated', desc: 'Tenderly', color: 'text-emerald-600 bg-emerald-50' },
+                { icon: Zap, label: 'Gasless', desc: 'Sponsored', color: 'text-amber-600 bg-amber-50' },
+                { icon: Wallet, label: 'Non-Custodial', desc: 'Your Keys', color: 'text-indigo-600 bg-indigo-50' },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-2 p-3 rounded-xl bg-slate-50">
+                  <div className={cn("p-2 rounded-lg", item.color)}>
+                    <item.icon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                    <p className="text-xs text-slate-500">{item.desc}</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Zap className="w-4 h-4 text-primary" />
-                  <span>Gasless execution</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Wallet className="w-4 h-4 text-accent" />
-                  <span>Non-custodial</span>
-                </div>
-              </CardContent>
-            </Card>
+              ))}
+            </div>
 
-            {/* Action Button */}
+            {/* CTA */}
             <Button
-              variant="primary"
-              size="lg"
-              className="w-full"
               onClick={handleStartConsolidation}
-              isLoading={isExecuting}
-              rightIcon={<ArrowRight className="w-5 h-5" />}
+              disabled={!selectedRoute}
+              className="w-full h-14 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold text-lg shadow-xl shadow-indigo-500/25"
             >
-              Start Consolidation
+              Review Consolidation
+              <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
           </motion.div>
         )}
 
-        {/* Simulating/Executing Phase */}
-        {(phase === 'simulating' || phase === 'executing') && (
+        {/* =============================================
+            PHASE 2: REVIEW
+        ============================================= */}
+        {phase === 'review' && (
+          <motion.div
+            key="review"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="space-y-6"
+          >
+            {/* Summary Card */}
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-xl">
+              <h3 className="text-sm font-medium text-indigo-100 mb-1">You will receive</h3>
+              <div className="flex items-baseline gap-2 mb-4">
+                <span className="text-4xl font-bold">{selectedRoute?.estimatedOutput}</span>
+                <span className="text-xl">{outputToken}</span>
+              </div>
+              <div className="pt-4 border-t border-white/20 flex justify-between text-sm">
+                <span className="text-indigo-100">From {tokens.length} tokens</span>
+                <span className="text-indigo-100">${totalValue.toFixed(2)} input value</span>
+              </div>
+            </div>
+
+            {/* Details */}
+            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Route</span>
+                <span className="font-semibold text-slate-900">{selectedRoute?.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Price Impact</span>
+                <span className="font-semibold text-slate-900">{selectedRoute?.priceImpact}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Gas Cost</span>
+                <span className="font-semibold text-emerald-600">$0.00 (Sponsored)</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Platform Fee (0.8%)</span>
+                <span className="font-semibold text-slate-900">${(totalValue * 0.008).toFixed(2)}</span>
+              </div>
+              <div className="pt-4 border-t border-slate-100 flex justify-between">
+                <span className="text-slate-900 font-semibold">Net Output</span>
+                <span className="font-bold text-indigo-600">{selectedRoute?.estimatedOutput} {outputToken}</span>
+              </div>
+            </div>
+
+            {/* Warning */}
+            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-800">Review Carefully</p>
+                <p className="text-sm text-amber-700">
+                  This action is irreversible. All selected tokens will be swapped to {outputToken} on Base.
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setPhase('configure')}
+                className="flex-1 h-14 rounded-xl"
+              >
+                Back
+              </Button>
+              <Button
+                onClick={handleConfirmConsolidation}
+                className="flex-1 h-14 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold"
+              >
+                Confirm & Execute
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* =============================================
+            PHASE 3: EXECUTING
+        ============================================= */}
+        {phase === 'executing' && (
           <motion.div
             key="executing"
             initial={{ opacity: 0, y: 20 }}
@@ -362,35 +525,111 @@ export function Consolidate({ address, tokens = [], isExecuting, error, onExecut
             exit={{ opacity: 0, y: -20 }}
             className="space-y-6"
           >
-            <Card>
-              <CardContent className="py-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="font-semibold text-foreground">Progress</h3>
-                  <StepperMini steps={steps} currentStep={currentStep} />
-                </div>
-                <Stepper steps={steps} currentStep={currentStep} />
-              </CardContent>
-            </Card>
+            {/* Header */}
+            <div className="text-center mb-8">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center mx-auto mb-4"
+              >
+                <Loader2 className="w-8 h-8 text-indigo-600" />
+              </motion.div>
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">Executing Consolidation</h2>
+              <p className="text-slate-500">Please keep this window open</p>
+            </div>
 
-            <Card variant="glass">
-              <CardContent className="text-center py-6">
-                <RefreshCw className="w-8 h-8 text-primary animate-spin mx-auto mb-4" />
-                <p className="text-muted-foreground">
-                  {phase === 'simulating' ? 'Simulating transaction...' : 'Executing transaction...'}
-                </p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Please do not close this window.
-                </p>
-              </CardContent>
-            </Card>
+            {/* Steps */}
+            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm">
+              <div className="space-y-4">
+                {steps.map((step, idx) => (
+                  <motion.div 
+                    key={step.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    className={cn(
+                      "flex items-center gap-4 p-4 rounded-xl transition-colors",
+                      step.status === 'complete' && "bg-emerald-50",
+                      step.status === 'in-progress' && "bg-indigo-50",
+                      step.status === 'pending' && "bg-slate-50"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
+                      step.status === 'complete' && "bg-emerald-500",
+                      step.status === 'in-progress' && "bg-indigo-500",
+                      step.status === 'pending' && "bg-slate-300"
+                    )}>
+                      {step.status === 'complete' ? (
+                        <Check className="w-5 h-5 text-white" />
+                      ) : step.status === 'in-progress' ? (
+                        <Loader2 className="w-5 h-5 text-white animate-spin" />
+                      ) : (
+                        <span className="text-white font-bold">{idx + 1}</span>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className={cn(
+                        "font-semibold",
+                        step.status === 'complete' && "text-emerald-800",
+                        step.status === 'in-progress' && "text-indigo-800",
+                        step.status === 'pending' && "text-slate-500"
+                      )}>
+                        {step.label}
+                      </p>
+                      <p className={cn(
+                        "text-sm",
+                        step.status === 'complete' && "text-emerald-600",
+                        step.status === 'in-progress' && "text-indigo-600",
+                        step.status === 'pending' && "text-slate-400"
+                      )}>
+                        {step.description}
+                      </p>
+                    </div>
+                    {step.status === 'complete' && (
+                      <span className="text-sm text-emerald-600 font-medium">Done</span>
+                    )}
+                    {step.status === 'in-progress' && (
+                      <span className="text-sm text-indigo-600 font-medium">Processing...</span>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </div>
 
-            <Button variant="ghost" className="w-full" onClick={handleCancel}>
-              Cancel
-            </Button>
+            {/* Transaction Hash */}
+            {txHash && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 rounded-xl bg-slate-100 flex items-center gap-3"
+              >
+                <span className="text-sm text-slate-500">TX:</span>
+                <code className="text-sm text-slate-700 font-mono truncate flex-1">
+                  {txHash.slice(0, 16)}...{txHash.slice(-8)}
+                </code>
+                <button 
+                  onClick={handleCopyTx}
+                  className="p-2 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-slate-500" />}
+                </button>
+                <a 
+                  href={`https://basescan.org/tx/${txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4 text-slate-500" />
+                </a>
+              </motion.div>
+            )}
           </motion.div>
         )}
 
-        {/* Complete Phase */}
+        {/* =============================================
+            PHASE 4: COMPLETE
+        ============================================= */}
         {phase === 'complete' && (
           <motion.div
             key="complete"
@@ -398,67 +637,155 @@ export function Consolidate({ address, tokens = [], isExecuting, error, onExecut
             animate={{ opacity: 1, scale: 1 }}
             className="space-y-6"
           >
-            <Card className="text-center py-8">
+            {/* Success Header */}
+            <div className="text-center py-8">
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 200, damping: 10 }}
-                className="w-20 h-20 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-6"
+                className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center mx-auto mb-6 shadow-xl shadow-emerald-500/30"
               >
-                <Check className="w-10 h-10 text-accent" />
+                <Check className="w-12 h-12 text-white" />
               </motion.div>
-              <h2 className="text-2xl font-bold text-foreground mb-2">
-                Portfolio Cleaned!
-              </h2>
-              <p className="text-muted-foreground max-w-sm mx-auto">
-                Successfully consolidated {tokens.length} assets into {selectedRoute?.estimatedOutput} {outputToken} on Base.
-              </p>
-            </Card>
+              <motion.h2 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="text-3xl font-bold text-slate-900 mb-2"
+              >
+                Portfolio Cleaned! 🎉
+              </motion.h2>
+              <motion.p 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="text-slate-500"
+              >
+                {tokens.length} tokens consolidated into {selectedRoute?.estimatedOutput} {outputToken}
+              </motion.p>
+            </div>
 
-            {/* Result Summary */}
-            <Card variant="elevated">
-              <CardContent className="space-y-4">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Assets Consolidated</span>
-                  <span className="font-semibold text-foreground">{tokens.length}</span>
+            {/* Result Card */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="p-6 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200"
+            >
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <p className="text-sm text-emerald-600 mb-1">Tokens Consolidated</p>
+                  <p className="text-2xl font-bold text-slate-900">{tokens.length}</p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Input Value</span>
-                  <span className="font-semibold text-foreground">${totalValue.toFixed(2)}</span>
+                <div>
+                  <p className="text-sm text-emerald-600 mb-1">Output Received</p>
+                  <p className="text-2xl font-bold text-slate-900">{selectedRoute?.estimatedOutput} {outputToken}</p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Output</span>
-                  <span className="font-semibold text-accent">{selectedRoute?.estimatedOutput} {outputToken}</span>
+                <div>
+                  <p className="text-sm text-emerald-600 mb-1">Gas Saved</p>
+                  <p className="text-2xl font-bold text-emerald-600">~$12.50</p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Gas Cost</span>
-                  <span className="font-semibold text-accent">$0.00 (Sponsored)</span>
+                <div>
+                  <p className="text-sm text-emerald-600 mb-1">Net Gain</p>
+                  <p className="text-2xl font-bold text-slate-900">${totalValue.toFixed(2)}</p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </motion.div>
 
-            {/* Share */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Share Your Achievement</CardTitle>
-                <CardDescription>Let others know about your cleaner portfolio!</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ShareButtons
-                  text={`Just cleaned my portfolio with @VortexProtocol! Consolidated ${tokens.length} dust tokens into ${outputToken} on Base 🌀✨`}
-                />
-              </CardContent>
-            </Card>
+            {/* Transaction Link */}
+            {txHash && (
+              <motion.a
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                href={`https://basescan.org/tx/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 p-4 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors"
+              >
+                <span className="text-sm text-slate-700">View on Basescan</span>
+                <ExternalLink className="w-4 h-4 text-slate-500" />
+              </motion.a>
+            )}
+
+            {/* Share Card */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+              className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm"
+            >
+              <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-indigo-500" />
+                Share Your Achievement
+              </h3>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 h-11 rounded-xl"
+                  onClick={() => {
+                    const text = encodeURIComponent(`Just cleaned my portfolio with @VortexProtocol! Consolidated ${tokens.length} dust tokens into ${outputToken} on Base 🌀✨`);
+                    window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
+                  }}
+                >
+                  <span className="mr-2">𝕏</span> Twitter
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 h-11 rounded-xl"
+                  onClick={() => {
+                    const text = encodeURIComponent(`Just cleaned my portfolio with @VortexProtocol! Consolidated ${tokens.length} dust tokens into ${outputToken} on Base 🌀✨`);
+                    window.open(`https://warpcast.com/~/compose?text=${text}`, '_blank');
+                  }}
+                >
+                  <span className="mr-2">💬</span> Farcaster
+                </Button>
+              </div>
+            </motion.div>
+
+            {/* XP Earned */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7 }}
+              className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-200"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                  <TrendingUp className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm text-indigo-600 font-medium">XP Earned</p>
+                  <p className="text-2xl font-bold text-slate-900">+{tokens.length * 50} XP</p>
+                </div>
+                <div className="ml-auto text-right">
+                  <p className="text-sm text-slate-500">Streak</p>
+                  <p className="text-lg font-bold text-indigo-600">🔥 3 Days</p>
+                </div>
+              </div>
+            </motion.div>
 
             {/* Actions */}
-            <div className="flex gap-4">
-              <Button variant="outline" className="flex-1" onClick={() => onNavigate && onNavigate('/dashboard')}>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.8 }}
+              className="flex gap-3 pt-4"
+            >
+              <Button
+                variant="outline"
+                onClick={() => onNavigate?.('/dashboard')}
+                className="flex-1 h-12 rounded-xl"
+              >
                 View Dashboard
               </Button>
-              <Button variant="primary" className="flex-1" onClick={() => onNavigate && onNavigate('/scan')}>
+              <Button
+                onClick={() => onNavigate?.('/scan')}
+                className="flex-1 h-12 rounded-xl bg-slate-900 hover:bg-slate-800"
+              >
                 Scan Again
               </Button>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
