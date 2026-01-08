@@ -64,7 +64,8 @@ async function apiCall<T>(
  */
 export async function scanWallet(
   walletAddress: string,
-  chainIds?: number[]
+  chainIds?: number[],
+  turnstileToken?: string | null
 ): Promise<{
   success: boolean;
   data: {
@@ -75,7 +76,14 @@ export async function scanWallet(
 }> {
   return apiCall('/api/v1/scan', {
     method: 'POST',
-    body: JSON.stringify({ walletAddress, chainIds }),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ 
+      walletAddress, 
+      chainIds: chainIds || [1, 8453, 42161, 10, 137, 56, 43114, 324, 838592], // Default to all chains
+      turnstileToken: turnstileToken || null,
+    }),
   });
 }
 

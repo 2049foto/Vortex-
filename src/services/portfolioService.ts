@@ -76,25 +76,36 @@ async function fetchTokensViaMoralis(
 
     const data = await response.json();
 
-    const tokens: TokenHolding[] = (data.result || []).map((token: any) => ({
-      chainId,
-      address: token.token_address,
-      symbol: token.symbol,
-      name: token.name,
-      decimals: parseInt(token.decimals),
-      balance: token.balance,
-      balanceFormatted: (
-        parseInt(token.balance) /
-        10 ** parseInt(token.decimals)
-      ).toString(),
-      priceUsd: parseFloat(token.usd_price || '0'),
-      valueUsd: parseFloat(token.usd_value || '0'),
-      logoUrl: token.logo || token.thumbnail,
-      liquidityUsd: 0,
-      volume24hUsd: 0,
-    }));
+    const tokens: TokenHolding[] = (data.result || [])
+      .filter((token: any) => {
+        // Filter out zero balance tokens at source
+        const balance = BigInt(token.balance || '0');
+        return balance > 0n;
+      })
+      .map((token: any) => {
+        const decimals = parseInt(token.decimals || '18');
+        const balance = BigInt(token.balance || '0');
+        const balanceFormatted = (Number(balance) / 10 ** decimals).toString();
+        const priceUsd = parseFloat(token.usd_price || '0');
+        const valueUsd = parseFloat(token.usd_value || '0') || (parseFloat(balanceFormatted) * priceUsd);
 
-    logger.info({ chainId, tokensFound: tokens.length }, 'Moralis fetch success');
+        return {
+          chainId,
+          address: token.token_address,
+          symbol: token.symbol || 'UNKNOWN',
+          name: token.name || 'Unknown Token',
+          decimals,
+          balance: balance.toString(),
+          balanceFormatted,
+          priceUsd,
+          valueUsd,
+          logoUrl: token.logo || token.thumbnail,
+          liquidityUsd: 0,
+          volume24hUsd: 0,
+        };
+      });
+
+    logger.info({ chainId, tokensFound: tokens.length, totalFromAPI: data.result?.length || 0 }, 'Moralis fetch success');
     return tokens;
   } catch (error) {
     logger.error({ error, walletAddress, chainId }, 'Moralis fetch failed');
@@ -400,41 +411,90 @@ export async function scanWallet(
     solanaAddress?: string;
   }
 ): Promise<TokenHolding[]> {
-  // Only use mainnet chains - filter out any testnet chain IDs
-  const evmChains = (chainIds || MAINNET_CHAIN_IDS).filter(id => 
+  // Use provided chainIds or default to ALL mainnet chains
+  // Only filter out testnet chains if provided
+  const requestedChains = chainIds || MAINNET_CHAIN_IDS;
+  const evmChains = requestedChains.filter(id => 
     MAINNET_CHAIN_IDS.includes(id)
   );
 
-  logger.info({ walletAddress, evmChains, includeSolana: options?.includeSolana }, 'Scanning wallet');
+  // If no valid chains, use all mainnet chains
+  const finalChains = evmChains.length > 0 ? evmChains : MAINNET_CHAIN_IDS;
+
+  logger.info({ 
+    walletAddress, 
+    requestedChains: requestedChains.length,
+    finalChains: finalChains.length,
+    chains: finalChains,
+    includeSolana: options?.includeSolana 
+  }, 'Scanning wallet across chains');
 
   // Fetch EVM tokens from all chains in parallel
   const evmResults = await Promise.allSettled(
-    evmChains.map(async (chainId) => {
-      // Fetch native + ERC20 tokens
-      const [native, erc20] = await Promise.allSettled([
-        fetchNativeBalance(walletAddress, chainId),
-        fetchTokensViaMoralis(walletAddress, chainId),
-      ]);
+    finalChains.map(async (chainId) => {
+      try {
+        logger.info({ chainId, walletAddress }, `Starting scan for chain ${chainId}`);
+        
+        // Fetch native + ERC20 tokens
+        const [native, erc20] = await Promise.allSettled([
+          fetchNativeBalance(walletAddress, chainId),
+          fetchTokensViaMoralis(walletAddress, chainId),
+        ]);
 
-      const tokens: TokenHolding[] = [];
+        const tokens: TokenHolding[] = [];
 
-      if (native.status === 'fulfilled' && native.value) {
-        tokens.push(native.value);
+        if (native.status === 'fulfilled' && native.value) {
+          const nativeBalance = parseFloat(native.value.balanceFormatted);
+          if (nativeBalance > 0) {
+            tokens.push(native.value);
+            logger.info({ chainId, nativeBalance }, `Found native balance for chain ${chainId}`);
+          }
+        } else if (native.status === 'rejected') {
+          logger.warn({ chainId, error: native.reason }, `Native balance fetch failed for chain ${chainId}`);
+        }
+
+        if (erc20.status === 'fulfilled') {
+          const erc20Count = erc20.value.length;
+          tokens.push(...erc20.value);
+          logger.info({ chainId, erc20Count }, `Found ${erc20Count} ERC20 tokens for chain ${chainId}`);
+        } else if (erc20.status === 'rejected') {
+          logger.warn({ chainId, error: erc20.reason }, `ERC20 fetch failed for chain ${chainId}, trying Alchemy fallback`);
+          // Try Alchemy as fallback
+          try {
+            const alchemyTokens = await fetchTokensViaAlchemy(walletAddress, chainId);
+            if (alchemyTokens.length > 0) {
+              tokens.push(...alchemyTokens);
+              logger.info({ chainId, alchemyCount: alchemyTokens.length }, `Alchemy fallback found ${alchemyTokens.length} tokens`);
+            }
+          } catch (alchemyError) {
+            logger.error({ chainId, error: alchemyError }, `Alchemy fallback also failed`);
+          }
+        }
+
+        logger.info({ chainId, totalTokens: tokens.length }, `Chain ${chainId} scan complete`);
+        return tokens;
+      } catch (error) {
+        logger.error({ chainId, error }, `Chain ${chainId} scan error`);
+        return [];
       }
-
-      if (erc20.status === 'fulfilled') {
-        tokens.push(...erc20.value);
-      }
-
-      return tokens;
     })
   );
 
-  // Flatten EVM results
+  // Flatten EVM results and log details
   const allTokens: TokenHolding[] = [];
-  evmResults.forEach((result) => {
+  evmResults.forEach((result, index) => {
     if (result.status === 'fulfilled') {
-      allTokens.push(...result.value);
+      const chainTokens = result.value;
+      allTokens.push(...chainTokens);
+      logger.info({ 
+        chainId: finalChains[index], 
+        tokensFound: chainTokens.length 
+      }, `Chain ${finalChains[index]} completed`);
+    } else {
+      logger.error({ 
+        chainId: finalChains[index], 
+        error: result.reason 
+      }, `Chain ${finalChains[index]} failed`);
     }
   });
 
@@ -449,12 +509,13 @@ export async function scanWallet(
     }
   }
 
-  // Filter out zero balance tokens and zero value tokens
-  // Include ALL mainnet tokens with value > 0 for classification
+  // Filter out ONLY zero balance tokens
+  // Include ALL tokens with balance > 0, even if valueUsd = 0 (for tokens without price data)
   const nonZeroTokens = allTokens.filter((token) => {
     const balance = parseFloat(token.balanceFormatted);
-    // Must have positive balance AND positive value (mainnet tokens with any value)
-    return balance > 0 && token.valueUsd > 0;
+    // Only require positive balance - include all tokens with balance > 0
+    // This ensures we scan ALL tokens, even if price data is unavailable
+    return balance > 0;
   });
 
   // Sort by value (highest first)

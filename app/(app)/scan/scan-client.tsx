@@ -32,9 +32,18 @@ export function ScanPageClient() {
     setError(null);
 
     try {
-      const result = await scanWallet(targetAddress);
+      // Scan ALL 10 EVM chains (all mainnet chains)
+      const allChainIds = [1, 8453, 42161, 10, 137, 56, 43114, 324, 838592];
+      const result = await scanWallet(targetAddress, allChainIds, turnstileToken);
       setScanResult(result.data);
+      
+      console.log('Scan result:', {
+        totalTokens: result.data?.tokens?.length || 0,
+        summary: result.data?.summary,
+        tokens: result.data?.tokens,
+      });
     } catch (err) {
+      console.error('Scan error:', err);
       setError(err instanceof Error ? err.message : 'Failed to scan wallet');
     } finally {
       setIsLoading(false);
