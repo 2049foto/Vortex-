@@ -26,6 +26,12 @@ export async function verifyTurnstileToken(
     return { success: false, error: 'Turnstile token is required' };
   }
 
+  if (!env.TURNSTILE_SECRET_KEY) {
+    logger.warn('TURNSTILE_SECRET_KEY is not configured, skipping verification');
+    // Fail open if Turnstile is not configured
+    return { success: true };
+  }
+
   try {
     const formData = new FormData();
     formData.append('secret', env.TURNSTILE_SECRET_KEY);
