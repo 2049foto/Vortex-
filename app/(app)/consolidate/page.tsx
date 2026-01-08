@@ -11,7 +11,7 @@ import { Consolidate } from '@/ui-components/consolidate';
 import { createConsolidation } from '@/lib/api';
 
 function ConsolidatePageContent() {
-  const { address } = useAccount();
+  const { address, isConnected } = useAccount();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isExecuting, setIsExecuting] = useState(false);
@@ -27,13 +27,18 @@ function ConsolidatePageContent() {
       return;
     }
 
+    if (!isConnected) {
+      setError('Wallet not connected');
+      return;
+    }
+
     setIsExecuting(true);
     setError(null);
 
     try {
       const result = await createConsolidation({
         walletAddress: address,
-        tokenAddresses: tokenAddresses || selectedTokens.map((t: any) => t.address),
+        tokenAddresses: tokenAddresses || selectedTokens.map((t: any) => t.contractAddress || t.address),
         targetToken: '0x4200000000000000000000000000000000000006', // WETH on Base
         chainId: 8453, // Base
       });
@@ -63,7 +68,7 @@ export default function ConsolidatePage() {
   return (
     <Suspense fallback={
       <div className="flex min-h-screen items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent"></div>
       </div>
     }>
       <ConsolidatePageContent />

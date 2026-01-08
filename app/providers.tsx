@@ -7,8 +7,8 @@
 
 import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { wagmiConfig } from '../src/lib/web3';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { wagmiConfig } from '@/lib/web3';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -22,6 +22,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
         },
       })
   );
+
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return <>{children}</>;
+  }
 
   return (
     <WagmiProvider config={wagmiConfig}>

@@ -1,6 +1,6 @@
 /**
  * Dashboard Component for VORTEX PROTOCOL
- * User stats, XP progress, activity history
+ * User stats, XP progress, activity history - Light Mode
  */
 
 'use client';
@@ -9,14 +9,10 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import {
   Sparkles, TrendingUp, Clock, Flame, Award, ArrowRight, ExternalLink,
-  CheckCircle, RefreshCw, Gift, Settings, ChevronRight, BarChart3
+  CheckCircle, RefreshCw, Gift, ChevronRight, BarChart3, Scan, ArrowUpRight
 } from 'lucide-react';
-import { Button } from './components/ui/Button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from './components/ui/Card';
-import { Badge } from './components/ui/Badge';
-import { EmptyState } from './components/ui/EmptyState';
-import { CHAINS } from './constants/chains';
-import { cn } from './utils/cn';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 // Default stats when no history
 const DEFAULT_STATS = {
@@ -44,13 +40,12 @@ function formatTimeAgo(date: Date): string {
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
 
-  if (minutes < 60) return `${minutes} minutes ago`;
-  if (hours < 24) return `${hours} hours ago`;
-  return `${days} days ago`;
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
 }
 
 export function Dashboard({ address, history, isLoading, error, onNavigate }: DashboardProps) {
-  // Use history data if available, otherwise show empty/default state
   const stats = history?.stats || DEFAULT_STATS;
   const activities = history?.activities || [];
 
@@ -59,303 +54,309 @@ export function Dashboard({ address, history, isLoading, error, onNavigate }: Da
   const xpProgress = (stats.xp % xpForNextLevel) / xpForNextLevel * 100;
   const xpNeeded = xpForNextLevel - (stats.xp % xpForNextLevel);
 
-  const statCards = [
-    {
-      icon: Sparkles,
-      label: 'Dust Found',
-      value: `$${(stats.dustFoundUSD || 0).toFixed(2)}`,
-      color: 'text-amber-500',
-      bgColor: 'bg-amber-500/10',
-    },
-    {
-      icon: TrendingUp,
-      label: 'Base TVL Added',
-      value: `$${(stats.baseTVLAdded || 0).toFixed(2)}`,
-      color: 'text-accent',
-      bgColor: 'bg-accent/10',
-    },
-    {
-      icon: Clock,
-      label: 'Portfolios Cleaned',
-      value: (stats.portfoliosCleaned || 0).toString(),
-      color: 'text-primary',
-      bgColor: 'bg-primary/10',
-    },
-    {
-      icon: Flame,
-      label: 'Current Streak',
-      value: `${stats.streak || 0} days`,
-      color: 'text-orange-500',
-      bgColor: 'bg-orange-500/10',
-    },
-  ];
-
-  const getActivityIcon = (type: string) => {
-    switch (type) {
-      case 'consolidate': return RefreshCw;
-      case 'scan': return BarChart3;
-      case 'claim': return Gift;
-      default: return CheckCircle;
-    }
-  };
-
-  const getActivityColor = (type: string) => {
-    switch (type) {
-      case 'consolidate': return 'text-accent bg-accent/10';
-      case 'scan': return 'text-primary bg-primary/10';
-      case 'claim': return 'text-amber-500 bg-amber-500/10';
-      default: return 'text-muted-foreground bg-muted';
-    }
-  };
-
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 animate-spin rounded-full border-3 border-slate-200 border-t-indigo-600"></div>
+          <span className="text-sm text-slate-500">Loading dashboard...</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-5xl mx-auto px-4 py-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
-          <p className="mt-1 text-muted-foreground">
+          <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+          <p className="text-sm text-slate-500 mt-1">
             Welcome back{address ? `, ${address.slice(0, 6)}...${address.slice(-4)}` : ''}
           </p>
         </div>
         <Button
-          variant="primary"
-          onClick={() => onNavigate && onNavigate('/scan')}
-          rightIcon={<ArrowRight className="w-4 h-4" />}
+          onClick={() => onNavigate?.('/scan')}
+          className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-medium"
         >
+          <Scan className="w-4 h-4 mr-2" />
           New Scan
         </Button>
       </div>
 
       {/* Error State */}
       {error && (
-        <Card className="mb-6 bg-destructive/5 border-destructive/20">
-          <CardContent className="py-4">
-            <p className="text-destructive text-sm">{error}</p>
-          </CardContent>
-        </Card>
+        <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm">
+          {error}
+        </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <StatCard 
+          icon={<Sparkles className="w-5 h-5" />}
+          iconBg="bg-amber-100 text-amber-600"
+          label="Dust Found"
+          value={`$${(stats.dustFoundUSD || 0).toFixed(2)}`}
+        />
+        <StatCard 
+          icon={<TrendingUp className="w-5 h-5" />}
+          iconBg="bg-emerald-100 text-emerald-600"
+          label="TVL Added"
+          value={`$${(stats.baseTVLAdded || 0).toFixed(2)}`}
+        />
+        <StatCard 
+          icon={<RefreshCw className="w-5 h-5" />}
+          iconBg="bg-indigo-100 text-indigo-600"
+          label="Portfolios Cleaned"
+          value={(stats.portfoliosCleaned || 0).toString()}
+        />
+        <StatCard 
+          icon={<Flame className="w-5 h-5" />}
+          iconBg="bg-orange-100 text-orange-600"
+          label="Streak"
+          value={`${stats.streak || 0} days`}
+        />
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Main Content - 2 columns */}
         <div className="lg:col-span-2 space-y-6">
-          {/* XP & Level Card */}
-          <Card variant="elevated">
-            <CardContent className="py-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                    <Award className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Current Level</p>
-                    <p className="text-2xl font-bold text-foreground">Level {stats.level || 1}</p>
-                  </div>
+          {/* Level & XP Progress */}
+          <div className="p-5 rounded-2xl bg-white border border-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
+                  <Award className="w-6 h-6 text-white" />
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-muted-foreground">Total XP</p>
-                  <p className="text-xl font-semibold text-foreground">{(stats.xp || 0).toLocaleString()}</p>
+                <div>
+                  <p className="text-sm text-slate-500">Current Level</p>
+                  <p className="text-2xl font-bold text-slate-900">Level {stats.level || 1}</p>
                 </div>
               </div>
-
-              {/* XP Progress Bar */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Progress to Level {(stats.level || 1) + 1}</span>
-                  <span className="text-foreground font-medium">{xpNeeded} XP needed</span>
-                </div>
-                <div className="h-3 bg-muted rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${xpProgress}%` }}
-                    transition={{ duration: 0.8, ease: 'easeOut' }}
-                    className="h-full bg-gradient-to-r from-primary to-accent rounded-full"
-                  />
-                </div>
+              <div className="text-right">
+                <p className="text-sm text-slate-500">Total XP</p>
+                <p className="text-xl font-semibold text-slate-900">{(stats.xp || 0).toLocaleString()}</p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {statCards.map((stat, index) => {
-              const Icon = stat.icon;
-              return (
+            {/* Progress Bar */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Progress to Level {(stats.level || 1) + 1}</span>
+                <span className="text-slate-700 font-medium">{xpNeeded} XP needed</span>
+              </div>
+              <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
                 <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <Card className="h-full">
-                    <CardContent className="py-4 text-center">
-                      <div className={cn('w-10 h-10 rounded-xl mx-auto mb-3 flex items-center justify-center', stat.bgColor)}>
-                        <Icon className={cn('w-5 h-5', stat.color)} />
-                      </div>
-                      <p className="text-xl font-bold text-foreground">{stat.value}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              );
-            })}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${xpProgress}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut' }}
+                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Activity Feed */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>Your latest portfolio actions</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {activities && activities.length > 0 ? (
-                activities.map((activity: any, index: number) => {
-                  const Icon = getActivityIcon(activity.type);
-                  const chain = CHAINS[activity.chainId];
-                  const activityDate = activity.date instanceof Date ? activity.date : new Date(activity.date);
-                  return (
-                    <motion.div
-                      key={activity.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="flex items-center gap-4 p-3 rounded-xl hover:bg-muted/50 transition-colors"
-                    >
-                      <div className={cn('w-10 h-10 rounded-full flex items-center justify-center', getActivityColor(activity.type))}>
-                        <Icon className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-foreground capitalize">{activity.type}</p>
-                          <Badge variant="muted" size="sm">{chain?.name || 'Unknown'}</Badge>
-                          {activity.status === 'complete' && (
-                            <CheckCircle className="w-4 h-4 text-accent" />
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {formatTimeAgo(activityDate)}
-                        </p>
-                      </div>
-                      {activity.amountUSD > 0 && (
-                        <span className="font-semibold text-foreground">
-                          ${activity.amountUSD.toFixed(2)}
-                        </span>
-                      )}
-                      {activity.txHash && (
-                        <a
-                          href={`https://basescan.org/tx/${activity.txHash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-foreground transition-colors"
-                          aria-label="View transaction"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
-                      )}
-                    </motion.div>
-                  );
-                })
+          <div className="rounded-2xl bg-white border border-slate-200">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h2 className="font-semibold text-slate-900">Recent Activity</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Your latest portfolio actions</p>
+            </div>
+            
+            <div className="p-2">
+              {activities.length > 0 ? (
+                <div className="space-y-1">
+                  {activities.slice(0, 5).map((activity: any, index: number) => (
+                    <ActivityItem key={activity.id || index} activity={activity} />
+                  ))}
+                </div>
               ) : (
-                <EmptyState
-                  title="No activity yet"
-                  description="Start your first scan to see your activity here!"
-                  actionLabel="Start Scanning"
-                  onAction={() => onNavigate && onNavigate('/scan')}
-                />
+                <div className="py-8 text-center">
+                  <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                    <Clock className="w-5 h-5 text-slate-400" />
+                  </div>
+                  <h3 className="font-medium text-slate-900 mb-1">No activity yet</h3>
+                  <p className="text-sm text-slate-500 mb-4">Start your first scan to see activity here</p>
+                  <Button 
+                    onClick={() => onNavigate?.('/scan')}
+                    className="h-9 px-4 rounded-lg bg-slate-900 text-white text-sm"
+                  >
+                    Start Scanning
+                  </Button>
+                </div>
               )}
-            </CardContent>
-            {activities && activities.length > 0 && (
-              <CardFooter className="justify-center">
-                <Button variant="ghost" size="sm">
+            </div>
+
+            {activities.length > 0 && (
+              <div className="px-5 py-3 border-t border-slate-100">
+                <button 
+                  onClick={() => onNavigate?.('/history')}
+                  className="flex items-center text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                >
                   View All Activity
                   <ChevronRight className="w-4 h-4 ml-1" />
-                </Button>
-              </CardFooter>
+                </button>
+              </div>
             )}
-          </Card>
+          </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-6">
+        {/* Sidebar - 1 column */}
+        <div className="space-y-4">
           {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button
-                variant="outline"
-                className="w-full justify-between"
-                onClick={() => onNavigate && onNavigate('/scan')}
-              >
-                <span className="flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4" />
-                  Scan Portfolio
-                </span>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-between"
-                onClick={() => onNavigate && onNavigate('/grant-metrics')}
-              >
-                <span className="flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4" />
-                  Grant Metrics
-                </span>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="rounded-2xl bg-white border border-slate-200 p-4">
+            <h3 className="font-semibold text-slate-900 mb-3">Quick Actions</h3>
+            <div className="space-y-2">
+              <QuickAction 
+                icon={<Scan className="w-4 h-4" />}
+                label="Scan Portfolio"
+                onClick={() => onNavigate?.('/scan')}
+              />
+              <QuickAction 
+                icon={<RefreshCw className="w-4 h-4" />}
+                label="Consolidate"
+                onClick={() => onNavigate?.('/consolidate')}
+              />
+              <QuickAction 
+                icon={<BarChart3 className="w-4 h-4" />}
+                label="Grant Metrics"
+                onClick={() => onNavigate?.('/grant-metrics')}
+              />
+              <QuickAction 
+                icon={<Clock className="w-4 h-4" />}
+                label="View History"
+                onClick={() => onNavigate?.('/history')}
+              />
+            </div>
+          </div>
+
+          {/* Streak Card */}
+          {stats.streak > 0 && (
+            <div className="rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200/50 p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+                  <Flame className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900">{stats.streak} Day Streak! 🔥</p>
+                  <p className="text-xs text-slate-500">Keep up the momentum</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Achievements Teaser */}
-          <Card variant="glass">
-            <CardContent className="py-6 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mx-auto mb-4">
-                <Award className="w-7 h-7 text-white" />
-              </div>
-              <h3 className="font-semibold text-foreground mb-1">Achievements</h3>
-              <p className="text-sm text-muted-foreground mb-4">Coming Soon</p>
-              <div className="flex justify-center gap-2">
-                {['🏆', '⭐', '🎯', '🔥'].map((emoji, i) => (
-                  <div
-                    key={i}
-                    className="w-10 h-10 rounded-full bg-muted/50 flex items-center justify-center text-lg opacity-50"
-                  >
-                    {emoji}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Streak Reminder */}
-          {stats.streak > 0 && (
-            <Card className="bg-gradient-to-br from-orange-500/10 to-amber-500/10 border-orange-500/20">
-              <CardContent className="py-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center">
-                    <Flame className="w-5 h-5 text-orange-500" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-foreground">{stats.streak} Day Streak!</p>
-                    <p className="text-sm text-muted-foreground">Keep it going!</p>
-                  </div>
+          <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 text-center">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mx-auto mb-3">
+              <Award className="w-6 h-6 text-white" />
+            </div>
+            <h3 className="font-semibold text-slate-900 mb-1">Achievements</h3>
+            <p className="text-xs text-slate-500 mb-3">Coming Soon</p>
+            <div className="flex justify-center gap-2">
+              {['🏆', '⭐', '🎯', '🔥'].map((emoji, i) => (
+                <div key={i} className="w-8 h-8 rounded-full bg-slate-200/50 flex items-center justify-center text-sm opacity-50">
+                  {emoji}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// Stat Card Component
+function StatCard({ icon, iconBg, label, value }: { 
+  icon: React.ReactNode;
+  iconBg: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="p-4 rounded-xl bg-white border border-slate-200">
+      <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center mb-3", iconBg)}>
+        {icon}
+      </div>
+      <p className="text-lg font-bold text-slate-900">{value}</p>
+      <p className="text-xs text-slate-500">{label}</p>
+    </div>
+  );
+}
+
+// Activity Item Component
+function ActivityItem({ activity }: { activity: any }) {
+  const activityDate = activity.date instanceof Date ? activity.date : new Date(activity.date);
+  
+  const getIcon = () => {
+    switch (activity.type) {
+      case 'consolidate': return <RefreshCw className="w-4 h-4" />;
+      case 'scan': return <Scan className="w-4 h-4" />;
+      case 'claim': return <Gift className="w-4 h-4" />;
+      default: return <CheckCircle className="w-4 h-4" />;
+    }
+  };
+
+  const getIconStyle = () => {
+    switch (activity.type) {
+      case 'consolidate': return 'bg-emerald-100 text-emerald-600';
+      case 'scan': return 'bg-indigo-100 text-indigo-600';
+      case 'claim': return 'bg-amber-100 text-amber-600';
+      default: return 'bg-slate-100 text-slate-600';
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors">
+      <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", getIconStyle())}>
+        {getIcon()}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-sm text-slate-900 capitalize">{activity.type}</span>
+          {activity.status === 'complete' && (
+            <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+          )}
+        </div>
+        <span className="text-xs text-slate-400">{formatTimeAgo(activityDate)}</span>
+      </div>
+      {activity.amountUSD > 0 && (
+        <span className="font-semibold text-sm text-slate-900">
+          ${activity.amountUSD.toFixed(2)}
+        </span>
+      )}
+      {activity.txHash && (
+        <a
+          href={`https://basescan.org/tx/${activity.txHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-1.5 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+        >
+          <ExternalLink className="w-4 h-4" />
+        </a>
+      )}
+    </div>
+  );
+}
+
+// Quick Action Button Component
+function QuickAction({ icon, label, onClick }: {
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all group"
+    >
+      <span className="flex items-center gap-2.5 text-sm font-medium text-slate-700">
+        <span className="text-slate-400 group-hover:text-indigo-600 transition-colors">{icon}</span>
+        {label}
+      </span>
+      <ArrowUpRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
+    </button>
   );
 }
 

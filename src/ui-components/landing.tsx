@@ -1,11 +1,13 @@
 'use client';
 
 import React from 'react';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Navbar } from '@/components/layout/navbar';
-import { ArrowRight, ShieldCheck, Zap, Layers } from 'lucide-react';
+import { 
+  ArrowRight, ShieldCheck, Zap, Layers, 
+  Sparkles, CheckCircle2, TrendingUp
+} from 'lucide-react';
 
 interface LandingProps {
   onConnect?: () => void;
@@ -15,13 +17,9 @@ interface LandingProps {
 }
 
 export function Landing({ onConnect, isConnected, address, onNavigate }: LandingProps) {
-  const { scrollY } = useScroll();
-  const y1 = useTransform(scrollY, [0, 500], [0, 200]);
-  const y2 = useTransform(scrollY, [0, 500], [0, -150]);
-
   const handleCta = () => {
     if (isConnected && onNavigate) {
-      onNavigate('/dashboard');
+      onNavigate('/scan');
     } else if (onConnect) {
       onConnect();
     }
@@ -32,166 +30,229 @@ export function Landing({ onConnect, isConnected, address, onNavigate }: Landing
     show: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.15,
-        delayChildren: 0.2
+        staggerChildren: 0.1,
+        delayChildren: 0.1
       }
     }
   };
 
   const item = {
-    hidden: { opacity: 0, y: 30 },
-    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 50 } }
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.4 } }
   };
 
   return (
-    <div className="flex flex-col min-h-screen overflow-hidden relative selection:bg-primary/20">
+    <div className="flex flex-col min-h-screen bg-gradient-subtle">
       <Navbar isConnected={isConnected || false} onConnect={onConnect || (() => {})} address={address} />
       
-      {/* Premium Background */}
-      <div className="fixed inset-0 -z-20 bg-background" />
-      <div className="fixed inset-0 -z-20 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-50/50 via-background to-background" />
-      
-      {/* Mesh Gradients - Subtler & More Sophisticated */}
-      <motion.div style={{ y: y1 }} className="fixed top-0 right-0 w-[800px] h-[800px] bg-gradient-to-b from-indigo-100/30 to-purple-100/30 blur-[120px] rounded-full translate-x-1/3 -translate-y-1/3 -z-10 opacity-60" />
-      <motion.div style={{ y: y2 }} className="fixed bottom-0 left-0 w-[600px] h-[600px] bg-gradient-to-t from-emerald-50/40 to-teal-50/40 blur-[120px] rounded-full -translate-x-1/3 translate-y-1/3 -z-10 opacity-60" />
-
       {/* Hero Section */}
-      <section className="relative flex-1 flex flex-col items-center justify-center pt-20 pb-40 px-4">
+      <section className="relative flex-1 flex flex-col items-center justify-center pt-24 pb-20 px-4">
+        {/* Subtle background decoration */}
+        <div className="absolute inset-0 -z-10 overflow-hidden">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-100/40 rounded-full blur-3xl" />
+          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-emerald-100/30 rounded-full blur-3xl" />
+        </div>
+
         <motion.div 
           variants={container}
           initial="hidden"
           animate="show"
-          className="text-center max-w-5xl mx-auto space-y-10"
+          className="text-center max-w-4xl mx-auto"
         >
           {/* Badge */}
-          <motion.div variants={item} className="flex justify-center">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/60 backdrop-blur-md border border-white/60 shadow-sm text-sm font-medium text-muted-foreground ring-1 ring-black/5 hover:bg-white/80 transition-colors cursor-pointer group">
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
-              </span>
-              <span className="font-display tracking-tight text-foreground">Vortex Premium v2.0</span>
-              <span className="w-px h-3 bg-border mx-1" />
-              <span className="text-primary flex items-center gap-1 group-hover:gap-2 transition-all">
-                Read Updates <ArrowRight className="w-3 h-3" />
-              </span>
+          <motion.div variants={item} className="flex justify-center mb-8">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 shadow-sm text-sm">
+              <Sparkles className="w-4 h-4 text-indigo-600" />
+              <span className="font-medium text-slate-700">Portfolio Hygiene Protocol</span>
+              <span className="w-px h-4 bg-slate-200" />
+              <span className="text-indigo-600 font-medium">v2.0</span>
             </div>
           </motion.div>
 
           {/* Heading */}
           <motion.h1 
             variants={item}
-            className="text-6xl md:text-8xl font-display font-bold tracking-tight leading-[1] md:leading-[0.9]"
+            className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 leading-tight"
           >
-            <span className="text-foreground drop-shadow-sm">Portfolio Hygiene</span>
+            <span className="text-slate-900">Clean Your Wallet,</span>
             <br />
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 animate-gradient-x pb-4">
-              Reimagined
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600">
+              Zero Gas Fees
             </span>
           </motion.h1>
 
           <motion.p 
             variants={item}
-            className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed font-light"
+            className="text-lg sm:text-xl text-slate-500 max-w-2xl mx-auto mb-10 leading-relaxed"
           >
-            The premium engine to consolidate dust, analyze risks, and optimize your assets across <span className="font-medium text-foreground">12+ chains</span> with bank-grade security.
+            Scan, classify, and consolidate dust tokens across{' '}
+            <span className="text-slate-700 font-medium">11 chains</span>{' '}
+            with AI-powered risk analysis. Gas sponsored by Pimlico & Coinbase.
           </motion.p>
 
           {/* CTA Buttons */}
-          <motion.div variants={item} className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-            <Button size="xl" variant="iridescent" onClick={handleCta} className="shadow-2xl shadow-indigo-500/25 w-full sm:w-auto hover:scale-105 transition-transform duration-300">
-              {isConnected ? 'Launch Dashboard' : 'Connect Wallet'}
-              <ArrowRight className="ml-2 w-5 h-5" />
-            </Button>
+          <motion.div variants={item} className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-16">
             <Button 
-              size="xl" 
-              variant="outline" 
-              className="w-full sm:w-auto border-2 hover:bg-white/60 bg-white/40 backdrop-blur-sm"
-              onClick={() => onNavigate?.('/scan')}
+              size="lg" 
+              onClick={handleCta}
+              className="w-full sm:w-auto h-12 px-8 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold shadow-lg shadow-slate-900/20 transition-all hover:scale-105"
             >
-              Scan Wallet
-              <ArrowRight className="ml-2 w-5 h-5" />
+              {isConnected ? 'Scan Portfolio' : 'Connect Wallet'}
+              <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
+            {isConnected && (
+              <Button 
+                size="lg" 
+                variant="outline"
+                onClick={() => onNavigate?.('/dashboard')}
+                className="w-full sm:w-auto h-12 px-8 rounded-xl border-slate-200 hover:bg-slate-50"
+              >
+                View Dashboard
+              </Button>
+            )}
           </motion.div>
 
           {/* Trust Metrics */}
-          <motion.div variants={item} className="pt-12 grid grid-cols-3 gap-8 md:gap-16 border-t border-border/60 max-w-3xl mx-auto text-center">
-            <div>
-              <div className="text-3xl font-bold font-display text-foreground">$45M+</div>
-              <div className="text-sm text-muted-foreground font-medium mt-1">Volume Cleaned</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold font-display text-foreground">120K+</div>
-              <div className="text-sm text-muted-foreground font-medium mt-1">Active Users</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold font-display text-foreground">Zero</div>
-              <div className="text-sm text-muted-foreground font-medium mt-1">Gas Fees</div>
-            </div>
+          <motion.div variants={item} className="grid grid-cols-3 gap-4 sm:gap-8 max-w-2xl mx-auto">
+            {[
+              { value: '$45M+', label: 'Volume Processed' },
+              { value: '120K+', label: 'Wallets Cleaned' },
+              { value: '0 Gas', label: 'User Fees' },
+            ].map((stat, i) => (
+              <div key={i} className="text-center">
+                <div className="text-2xl sm:text-3xl font-bold text-slate-900">{stat.value}</div>
+                <div className="text-xs sm:text-sm text-slate-500 mt-1">{stat.label}</div>
+              </div>
+            ))}
           </motion.div>
         </motion.div>
       </section>
 
-      {/* Features Grid */}
-      <section className="py-32 relative">
-        <div className="container mx-auto max-w-7xl px-4">
-           <div className="text-center mb-20">
-             <h2 className="text-4xl md:text-5xl font-display font-bold mb-4 text-foreground">Everything you need,<br/>nothing you don't.</h2>
-             <p className="text-lg text-muted-foreground font-light">Built for the modern DeFi power user.</p>
-           </div>
+      {/* Features Section */}
+      <section className="py-16 sm:py-24 bg-white border-t border-slate-100">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12 sm:mb-16">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-3">
+              Intelligent Portfolio Management
+            </h2>
+            <p className="text-slate-500 max-w-xl mx-auto">
+              Advanced risk analysis meets seamless execution
+            </p>
+          </div>
            
-           <div className="grid md:grid-cols-3 gap-8">
-             <FeatureCard 
-               icon={Layers}
-               color="indigo"
-               title="Intelligent Classification"
-               description="Our 20-layer scoring engine automatically categorizes your assets into Legit, Dust, and Risk tiers."
-             />
-             <FeatureCard 
-               icon={Zap}
-               color="amber"
-               title="Gasless Consolidation"
-               description="Sweep hundreds of dust tokens into ETH or USDC in a single transaction, fully sponsored by our paymasters."
-             />
-             <FeatureCard 
-               icon={ShieldCheck}
-               color="emerald"
-               title="Deep Risk Analysis"
-               description="Every contract is audited in real-time. We flag honeypots, rugs, and malicious approvals before you interact."
-             />
-           </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <FeatureCard 
+              icon={<Layers className="w-6 h-6" />}
+              iconBg="bg-indigo-100 text-indigo-600"
+              title="20-Layer Risk Scoring"
+              description="AI-powered analysis across liquidity, honeypot detection, rug-pull patterns, and 17 more factors."
+            />
+            <FeatureCard 
+              icon={<Zap className="w-6 h-6" />}
+              iconBg="bg-amber-100 text-amber-600"
+              title="Gasless Swaps"
+              description="Consolidate hundreds of dust tokens in a single transaction. Gas fees fully sponsored."
+            />
+            <FeatureCard 
+              icon={<ShieldCheck className="w-6 h-6" />}
+              iconBg="bg-emerald-100 text-emerald-600"
+              title="Secure Execution"
+              description="Every swap simulated via Tenderly before execution. Your assets are protected."
+            />
+          </div>
         </div>
       </section>
+
+      {/* How It Works */}
+      <section className="py-16 sm:py-20 border-t border-slate-100">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-3">
+              How It Works
+            </h2>
+            <p className="text-slate-500">Three simple steps to a cleaner wallet</p>
+          </div>
+
+          <div className="space-y-4">
+            {[
+              {
+                step: '1',
+                title: 'Connect & Scan',
+                description: 'Connect your wallet and we scan all 11 chains for token holdings in seconds.',
+              },
+              {
+                step: '2',
+                title: 'Review & Select',
+                description: 'See tokens classified into Legit, Dust, Microdust, and Risk tiers. Select what to consolidate.',
+              },
+              {
+                step: '3',
+                title: 'Consolidate',
+                description: 'Execute gasless swaps to convert selected tokens into ETH or USDC on Base.',
+              },
+            ].map((item, i) => (
+              <div 
+                key={i}
+                className="flex items-start gap-4 p-5 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 transition-colors"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg">
+                  {item.step}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900 text-lg mb-1">{item.title}</h3>
+                  <p className="text-slate-500 text-sm leading-relaxed">{item.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA */}
+          <div className="mt-10 text-center">
+            <Button 
+              size="lg" 
+              onClick={handleCta}
+              className="h-12 px-8 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+            >
+              {isConnected ? 'Start Scanning' : 'Get Started'}
+              <ArrowRight className="ml-2 w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-8 border-t border-slate-100">
+        <div className="max-w-6xl mx-auto px-4 text-center">
+          <div className="flex items-center justify-center gap-2 text-slate-500 text-sm">
+            <Sparkles className="w-4 h-4 text-indigo-600" />
+            <span>Vortex Protocol © 2026</span>
+            <span className="text-slate-300">•</span>
+            <span>Built on Base</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
 
-function FeatureCard({ icon: Icon, title, description, color }: { icon: any, title: string, description: string, color: string }) {
-  const colors = {
-    indigo: "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white",
-    amber: "bg-amber-50 text-amber-600 group-hover:bg-amber-500 group-hover:text-white",
-    emerald: "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white"
-  };
-
+function FeatureCard({ 
+  icon, 
+  iconBg, 
+  title, 
+  description 
+}: { 
+  icon: React.ReactNode;
+  iconBg: string;
+  title: string; 
+  description: string;
+}) {
   return (
-    <Card variant="glass" className="group overflow-hidden relative hover:border-transparent transition-all duration-500">
-      <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-${color}-50/50 to-white -z-10`} />
-      
-      <CardContent className="p-10 space-y-6">
-        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm ${colors[color as keyof typeof colors]}`}>
-          <Icon className="w-8 h-8" />
-        </div>
-        <div>
-          <h3 className="text-2xl font-bold font-display mb-3 text-foreground">{title}</h3>
-          <p className="text-muted-foreground leading-relaxed text-lg font-light">
-            {description}
-          </p>
-        </div>
-        
-        <div className="pt-4 flex items-center text-sm font-bold text-foreground opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-          Learn more <ArrowRight className="w-4 h-4 ml-2" />
-        </div>
-      </CardContent>
-    </Card>
+    <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 hover:border-slate-200 transition-all group">
+      <div className={`w-12 h-12 rounded-xl ${iconBg} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+        {icon}
+      </div>
+      <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
+      <p className="text-slate-500 text-sm leading-relaxed">{description}</p>
+    </div>
   );
 }

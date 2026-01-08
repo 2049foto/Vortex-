@@ -373,7 +373,24 @@ async function getNativeTokenPrice(chainId: number): Promise<number> {
 }
 
 /**
- * Scan wallet across all supported chains (10 EVM + Solana)
+ * MAINNET CHAIN IDS ONLY - No testnets
+ * Critical: Never include testnet chain IDs
+ */
+const MAINNET_CHAIN_IDS = [
+  1,      // Ethereum Mainnet
+  8453,   // Base Mainnet  
+  42161,  // Arbitrum One Mainnet
+  10,     // Optimism Mainnet
+  137,    // Polygon Mainnet
+  56,     // BNB Smart Chain Mainnet
+  43114,  // Avalanche C-Chain Mainnet
+  324,    // zkSync Era Mainnet
+  838592, // Monad Mainnet (if available)
+];
+
+/**
+ * Scan wallet across all supported MAINNET chains (10 EVM + Solana)
+ * IMPORTANT: Only scans mainnet tokens - testnet tokens are excluded
  */
 export async function scanWallet(
   walletAddress: string,
@@ -383,8 +400,10 @@ export async function scanWallet(
     solanaAddress?: string;
   }
 ): Promise<TokenHolding[]> {
-  // Default to all EVM chains
-  const evmChains = chainIds || [1, 8453, 42161, 10, 137, 56, 43114, 324, 838592];
+  // Only use mainnet chains - filter out any testnet chain IDs
+  const evmChains = (chainIds || MAINNET_CHAIN_IDS).filter(id => 
+    MAINNET_CHAIN_IDS.includes(id)
+  );
 
   logger.info({ walletAddress, evmChains, includeSolana: options?.includeSolana }, 'Scanning wallet');
 
@@ -430,10 +449,12 @@ export async function scanWallet(
     }
   }
 
-  // Filter out zero balance tokens
+  // Filter out zero balance tokens and zero value tokens
+  // Include ALL mainnet tokens with value > 0 for classification
   const nonZeroTokens = allTokens.filter((token) => {
     const balance = parseFloat(token.balanceFormatted);
-    return balance > 0 && token.valueUsd >= 0.01; // Minimum $0.01
+    // Must have positive balance AND positive value (mainnet tokens with any value)
+    return balance > 0 && token.valueUsd > 0;
   });
 
   // Sort by value (highest first)
