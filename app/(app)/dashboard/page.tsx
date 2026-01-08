@@ -11,14 +11,22 @@ import { Dashboard } from '@/ui-components/dashboard';
 import { getUserHistory } from '@/lib/api';
 
 export default function DashboardPage() {
-  const { address, isConnected } = useAccount();
   const router = useRouter();
   const [history, setHistory] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  
+  // Only use wagmi hooks after mount to avoid SSR issues
+  const accountResult = mounted ? useAccount() : { address: undefined, isConnected: false };
+  const { address, isConnected } = accountResult;
 
   useEffect(() => {
-    if (!address) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || !address) {
       setIsLoading(false);
       return;
     }
@@ -57,7 +65,7 @@ export default function DashboardPage() {
     };
 
     fetchHistory();
-  }, [address]);
+  }, [address, mounted]);
 
   return (
     <Dashboard

@@ -14,15 +14,23 @@ import { Button } from '@/components/ui/button';
 import { ArrowUpRight, Clock, Search, ArrowRight, ExternalLink, Wallet } from 'lucide-react';
 
 export default function HistoryPage() {
-  const { address, isConnected } = useAccount();
   const router = useRouter();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [mounted, setMounted] = useState(false);
+  
+  // Only use wagmi hooks after mount to avoid SSR issues
+  const accountResult = mounted ? useAccount() : { address: undefined, isConnected: false };
+  const { address, isConnected } = accountResult;
 
   useEffect(() => {
-    if (!address) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || !address) {
       setIsLoading(false);
       return;
     }
@@ -39,7 +47,7 @@ export default function HistoryPage() {
     };
 
     fetchHistory();
-  }, [address]);
+  }, [address, mounted]);
 
   const filteredTransactions = transactions.filter(tx => 
     !searchQuery || 
