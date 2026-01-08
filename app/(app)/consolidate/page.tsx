@@ -9,6 +9,9 @@ import { useAccount } from 'wagmi';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Consolidate } from '@/ui-components/consolidate';
 import { createConsolidation } from '@/lib/api';
+import { ClientOnly } from '@/components/client-only';
+
+export const dynamic = 'force-dynamic';
 
 function ConsolidatePageContent() {
   const { address, isConnected } = useAccount();
@@ -66,13 +69,15 @@ function ConsolidatePageContent() {
 
 export default function ConsolidatePage() {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent"></div>
-      </div>
-    }>
-      <ConsolidatePageContent />
-    </Suspense>
+    <ClientOnly>
+      <Suspense fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent"></div>
+        </div>
+      }>
+        <ConsolidatePageContent />
+      </Suspense>
+    </ClientOnly>
   );
 }
 
