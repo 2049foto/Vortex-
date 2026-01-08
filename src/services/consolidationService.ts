@@ -13,6 +13,8 @@ import * as balancer from '../blockchain/routers/balancer';
 import { simulateTransaction } from '../blockchain/tenderly';
 import { sponsorWithFallback } from '../blockchain/coinbase';
 import { sendUserOp, getUserOpReceipt } from '../blockchain/pimlico';
+import { validatePaymasterPolicy } from '../middleware/paymasterPolicy';
+import { getBridgeQuotes, chooseBridge } from './bridgeService';
 import { db } from '../db/client';
 import { consolidationRequests, consolidationAnalytics, users } from '../db/schema';
 import { eq } from 'drizzle-orm';
@@ -102,9 +104,45 @@ export async function createConsolidationPlan(
 
   // Get swap routes for each token
   const swapTokens = plan.tokens.filter((t) => t.action === 'swap');
+  const OUTPUT_CHAIN_ID = 8453; // Base
   
   for (const { token } of swapTokens) {
     try {
+      // If token is on different chain, check if we should bridge
+      if (token.chainId !== OUTPUT_CHAIN_ID) {
+        const bridgeQuotes = await getBridgeQuotes(
+          token.chainId,
+          OUTPUT_CHAIN_ID,
+          token.address,
+          token.balance,
+          walletAddress
+        );
+        
+        const bridgeDecision = chooseBridge(bridgeQuotes, token.valueUsd);
+        
+        if (bridgeDecision.shouldBridge && bridgeDecision.selectedBridge) {
+          // Bridge first, then swap on Base
+          logger.info(
+            { token: token.symbol, bridge: bridgeDecision.selectedBridge.bridge },
+            'Will bridge token to Base before swapping'
+          );
+          
+          // After bridging, swap on Base
+          // For now, we'll swap directly on source chain and let user bridge manually
+          // TODO: Implement full bridge + swap flow
+        } else {
+          logger.info(
+            { token: token.symbol, reason: bridgeDecision.reason },
+            'Skipping bridge (not economical)'
+          );
+          // Skip tokens that aren't worth bridging
+          plan.tokens.find(t => t.token.address === token.address)!.action = 'skip';
+          plan.tokens.find(t => t.token.address === token.address)!.reason = bridgeDecision.reason;
+          continue;
+        }
+      }
+      
+      // Find best swap route
       const route = await findBestRoute(token, targetToken, walletAddress);
       if (route) {
         plan.swaps.push(route);
@@ -294,9 +332,11 @@ export async function executeConsolidation(
     .returning();
 
   // Execute swaps sequentially
+  let lastTxHash = '';
   try {
     for (const swap of plan.swaps) {
-      await executeSwap(swap, walletAddress);
+      const txHash = await executeSwap(swap, walletAddress);
+      if (txHash) lastTxHash = txHash;
     }
 
     // Update to success
@@ -306,6 +346,7 @@ export async function executeConsolidation(
         status: 'CONFIRMED', 
         actualOutput: plan.estimatedOutput,
         completedAt: new Date(),
+        txHash: lastTxHash || null,
       })
       .where(eq(consolidationRequests.id, request.id));
 
@@ -332,7 +373,7 @@ export async function executeConsolidation(
 /**
  * Execute single swap
  */
-async function executeSwap(swap: SwapRoute, walletAddress: string): Promise<void> {
+async function executeSwap(swap: SwapRoute, walletAddress: string): Promise<string> {
   logger.info(
     { router: swap.router, fromToken: swap.fromToken.address },
     'Executing swap'
@@ -384,13 +425,25 @@ async function executeSwap(swap: SwapRoute, walletAddress: string): Promise<void
     signature: '0x',
   };
 
+  // Validate paymaster policy before sponsoring
+  const estimatedValueUsd = parseFloat(swap.fromToken.valueUsd?.toString() || '0');
+  const policyCheck = await validatePaymasterPolicy(
+    userOp,
+    swap.fromToken.chainId,
+    estimatedValueUsd
+  );
+
+  if (!policyCheck.allowed) {
+    throw new Error(`Paymaster policy violation: ${policyCheck.reason}`);
+  }
+
   // Sponsor with paymaster
   const { result: sponsorData, paymaster } = await sponsorWithFallback(userOp);
   
   userOp.paymasterAndData = sponsorData.paymasterAndData;
   userOp.callGasLimit = sponsorData.callGasLimit;
 
-  logger.info({ paymaster }, 'UserOp sponsored');
+  logger.info({ paymaster, policyCheck }, 'UserOp sponsored');
 
   // Send to bundler
   const userOpHash = await sendUserOp(userOp as any);
@@ -408,7 +461,10 @@ async function executeSwap(swap: SwapRoute, walletAddress: string): Promise<void
     throw new Error('UserOp execution failed');
   }
 
-  logger.info({ userOpHash, txHash: receipt.receipt.transactionHash }, 'Swap executed');
+  const txHash = receipt.receipt.transactionHash;
+  logger.info({ userOpHash, txHash }, 'Swap executed');
+  
+  return txHash;
 }
 
 /**

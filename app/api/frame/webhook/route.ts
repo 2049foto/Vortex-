@@ -1,129 +1,95 @@
 /**
  * Vortex Protocol - Farcaster Frame Webhook
- * Handles notifications and Mini App events
+ * Handles notifications and Mini App events (Add-to-App flow)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { registerNotificationToken } from '@/services/farcasterService';
+import { createLogger } from '@/utils/logger';
+import { db } from '@/db/client';
+import { users, notificationTokens } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
-// Store notification details (in production, use database)
-const notificationStore = new Map<string, {
-  fid: number;
-  token: string;
-  url: string;
-}>();
+const logger = createLogger('farcaster-webhook');
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { event, fid, notificationDetails } = body;
+    const { event, fid, notificationDetails, walletAddress } = body;
 
-    console.log('Farcaster webhook event:', event, fid);
+    logger.info({ event, fid, hasNotificationDetails: !!notificationDetails }, 'Farcaster webhook event');
 
     switch (event) {
       case 'frame_added':
-        // User added the Mini App
-        if (notificationDetails) {
-          notificationStore.set(fid.toString(), {
-            fid,
-            token: notificationDetails.token,
-            url: notificationDetails.url,
-          });
-          console.log(`User ${fid} added Vortex Mini App`);
+      case 'notifications_enabled':
+        // User added the Mini App or enabled notifications
+        if (notificationDetails && fid) {
+          try {
+            // Get or create user
+            let userId: string;
+            if (walletAddress) {
+              const [user] = await db
+                .select()
+                .from(users)
+                .where(eq(users.walletAddress, walletAddress))
+                .limit(1);
+              
+              if (user) {
+                userId = user.id;
+              } else {
+                const [newUser] = await db
+                  .insert(users)
+                  .values({ walletAddress })
+                  .returning();
+                userId = newUser.id;
+              }
+            } else {
+              // Use FID as userId if no wallet
+              userId = `farcaster:${fid}`;
+            }
+
+            // Register notification token
+            const clientId = `farcaster:${fid}`;
+            await registerNotificationToken(
+              userId,
+              clientId,
+              {
+                url: notificationDetails.url || notificationDetails.callbackUrl,
+                token: notificationDetails.token,
+              }
+            );
+
+            logger.info({ fid, userId, clientId }, 'Notification token registered');
+          } catch (error) {
+            logger.error({ error, fid }, 'Failed to register notification token');
+            // Don't fail the webhook
+          }
         }
         break;
 
       case 'frame_removed':
-        // User removed the Mini App
-        notificationStore.delete(fid.toString());
-        console.log(`User ${fid} removed Vortex Mini App`);
-        break;
-
-      case 'notifications_enabled':
-        // User enabled notifications
-        if (notificationDetails) {
-          const existing = notificationStore.get(fid.toString());
-          if (existing) {
-            notificationStore.set(fid.toString(), {
-              ...existing,
-              token: notificationDetails.token,
-              url: notificationDetails.url,
-            });
-          }
-          console.log(`User ${fid} enabled notifications`);
-        }
-        break;
-
       case 'notifications_disabled':
-        // User disabled notifications
-        const entry = notificationStore.get(fid.toString());
-        if (entry) {
-          notificationStore.set(fid.toString(), {
-            ...entry,
-            token: '',
-            url: '',
-          });
+        // User removed the Mini App or disabled notifications
+        try {
+          const clientId = `farcaster:${fid}`;
+          await db
+            .update(notificationTokens)
+            .set({ enabled: false })
+            .where(eq(notificationTokens.clientId, clientId));
+          
+          logger.info({ fid, clientId }, 'Notifications disabled');
+        } catch (error) {
+          logger.error({ error, fid }, 'Failed to disable notifications');
         }
-        console.log(`User ${fid} disabled notifications`);
         break;
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Webhook error:', error);
+    logger.error({ error }, 'Webhook processing failed');
     return NextResponse.json(
-      { error: 'Webhook processing failed' },
+      { success: false, error: 'Webhook processing failed' },
       { status: 500 }
     );
   }
 }
-
-// Helper function to send notification (not exported)
-async function sendNotificationInternal(
-  fid: number,
-  title: string,
-  body: string,
-  targetUrl?: string
-) {
-  const entry = notificationStore.get(fid.toString());
-  if (!entry || !entry.token || !entry.url) {
-    console.log(`No notification token for user ${fid}`);
-    return false;
-  }
-
-  try {
-    const response = await fetch(entry.url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${entry.token}`,
-      },
-      body: JSON.stringify({
-        notificationId: `vortex-${Date.now()}`,
-        title,
-        body,
-        targetUrl: targetUrl || 'https://vortex.build',
-      }),
-    });
-
-    return response.ok;
-  } catch (error) {
-    console.error('Failed to send notification:', error);
-    return false;
-  }
-}
-
-// GET endpoint to send a notification (for internal use)
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const fid = searchParams.get('fid');
-  const title = searchParams.get('title');
-  const body = searchParams.get('body');
-  
-  if (!fid || !title || !body) {
-    return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
-  }
-
-  const success = await sendNotificationInternal(parseInt(fid), title, body);
-  return NextResponse.json({ success });
-}
-

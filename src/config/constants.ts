@@ -40,15 +40,15 @@ export const RISK_LAYER_WEIGHTS = {
   layer10_volatility: 0.05, // 5%
   layer11_age: 0.03, // 3%
   layer12_social: 0.00, // 0% (bonus)
-  // Phase 1.2 - Advanced layers (add later)
-  layer13_flash_loan: 0.00,
-  layer14_bridge_risk: 0.00,
-  layer15_insider_trading: 0.00,
-  layer16_regulatory: 0.00,
-  layer17_validator_centralization: 0.00,
-  layer18_composability: 0.00,
-  layer19_exploit_history: 0.00,
-  layer20_ml_anomaly: 0.00,
+  // Phase 1.2 - Advanced layers
+  layer13_flash_loan: 0.08, // 8%
+  layer14_bridge_risk: 0.07, // 7%
+  layer15_insider_trading: 0.06, // 6%
+  layer16_regulatory: 0.05, // 5%
+  layer17_validator_centralization: 0.06, // 6%
+  layer18_composability: 0.05, // 5%
+  layer19_exploit_history: 0.08, // 8%
+  layer20_ml_anomaly: 0.08, // 8%
 } as const;
 
 // ============================================

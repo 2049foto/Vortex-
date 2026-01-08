@@ -4,11 +4,29 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireTurnstile } from '@/middleware/turnstile';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { walletAddress, selectedTokens, outputToken, slippagePct, dryRun } = body;
+    const { walletAddress, selectedTokens, outputToken, slippagePct, dryRun, turnstileToken } = body;
+
+    // Verify Turnstile token (bot protection)
+    try {
+      const clientIp = request.headers.get('x-forwarded-for') || 
+                      request.headers.get('x-real-ip') || 
+                      'unknown';
+      await requireTurnstile(turnstileToken || '', clientIp);
+    } catch (turnstileError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Bot verification failed',
+          message: turnstileError instanceof Error ? turnstileError.message : 'Please complete the verification',
+        },
+        { status: 403 }
+      );
+    }
 
     // Validate required fields
     if (!walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
@@ -28,8 +46,9 @@ export async function POST(request: NextRequest) {
     try {
       // Dynamic imports to avoid build-time errors
       const { scanWallet } = await import('@/services/portfolioService');
-      const { batchCalculateRiskScores } = await import('@/services/riskScoringService');
+      const { batchCalculateRiskScoresV2 } = await import('@/services/riskScoringServiceV2');
       const { createConsolidationPlan, executeConsolidation } = await import('@/services/consolidationService');
+      const { notifyConsolidationComplete } = await import('@/services/farcasterService');
 
       // Step 1: Fetch full token data for selected tokens
       const chainIds = [...new Set(selectedTokens.map((t: any) => t.chainId))] as number[];
@@ -51,8 +70,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Step 2: Calculate risk scores
-      const riskScores = await batchCalculateRiskScores(tokensToConsolidate);
+      // Step 2: Calculate risk scores (using V2)
+      const riskScores = await batchCalculateRiskScoresV2(tokensToConsolidate);
 
       // Step 3: Create consolidation plan
       const targetToken = outputToken === 'USDC' 
@@ -100,6 +119,24 @@ export async function POST(request: NextRequest) {
 
       // Step 4: Execute consolidation (real mainnet execution)
       const result = await executeConsolidation(plan.id, walletAddress, plan);
+
+      // Step 5: Send notification on completion
+      if (result.status === 'success') {
+        try {
+          // Get consolidation request to get txHash
+          const { getConsolidationStatus } = await import('@/services/consolidationService');
+          const consolidation = await getConsolidationStatus(result.requestId);
+          
+          const outputValue = parseFloat(plan.estimatedOutput || '0');
+          const gasSaved = parseFloat(plan.estimatedGasSaved || '0');
+          const txHash = consolidation?.txHash || '';
+          
+          await notifyConsolidationComplete(walletAddress, outputValue, gasSaved, txHash);
+        } catch (notifError) {
+          // Don't fail if notification fails
+          console.warn('Failed to send completion notification:', notifError);
+        }
+      }
 
       return NextResponse.json({
         success: true,
