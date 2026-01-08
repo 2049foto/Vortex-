@@ -158,6 +158,7 @@ Thumbs.db
 
 # Bun
 bun.lockb
+.bun/
 
 # Temporary files
 *.tmp
