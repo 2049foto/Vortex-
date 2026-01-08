@@ -5,7 +5,7 @@
 
 import { createLogger } from '../utils/logger';
 import type { TokenHolding } from './portfolioService';
-import type { RiskScore } from './riskScoringService';
+import type { RiskResult } from './riskScoringServiceV2';
 import * as oneInch from '../blockchain/routers/oneInch';
 import * as uniswapV4 from '../blockchain/routers/uniswapV4';
 import * as curve from '../blockchain/routers/curve';
@@ -25,7 +25,7 @@ export interface ConsolidationPlan {
   id: string;
   tokens: Array<{
     token: TokenHolding;
-    risk: RiskScore;
+    risk: RiskResult;
     action: 'swap' | 'skip';
     reason?: string;
   }>;
@@ -56,7 +56,7 @@ export interface SwapRoute {
 export async function createConsolidationPlan(
   walletAddress: string,
   tokens: TokenHolding[],
-  riskScores: Map<string, RiskScore>,
+  riskScores: Map<string, RiskResult>,
   targetToken: string = '0x4200000000000000000000000000000000000006' // WETH on Base
 ): Promise<ConsolidationPlan> {
   logger.info({ walletAddress, tokenCount: tokens.length }, 'Creating consolidation plan');
@@ -76,7 +76,18 @@ export async function createConsolidationPlan(
     const risk = riskScores.get(riskKey);
 
     if (!risk) {
-      plan.tokens.push({ token, risk: {} as RiskScore, action: 'skip', reason: 'No risk data' });
+      plan.tokens.push({ 
+        token, 
+        risk: {
+          riskScore0to100: 50,
+          tier: 'RISK',
+          confidence0to1: 0,
+          layers: {},
+          explanation: 'No risk data available'
+        } as RiskResult, 
+        action: 'skip', 
+        reason: 'No risk data' 
+      });
       continue;
     }
 
