@@ -13,6 +13,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowUpRight, Clock, Search, ArrowRight, ExternalLink, Wallet } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default function HistoryPage() {
   const router = useRouter();
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -21,9 +23,8 @@ export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [mounted, setMounted] = useState(false);
   
-  // Only use wagmi hooks after mount to avoid SSR issues
-  const accountResult = mounted ? useAccount() : { address: undefined, isConnected: false };
-  const { address, isConnected } = accountResult;
+  // Always call hooks, but only use values after mount
+  const { address, isConnected } = useAccount();
 
   useEffect(() => {
     setMounted(true);
@@ -31,7 +32,7 @@ export default function HistoryPage() {
 
   useEffect(() => {
     if (!mounted || !address) {
-      setIsLoading(false);
+      if (mounted) setIsLoading(false);
       return;
     }
 

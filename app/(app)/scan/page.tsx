@@ -12,6 +12,8 @@ import { Scan } from '@/ui-components/scan';
 import { scanWallet } from '@/lib/api';
 import Turnstile from '@/components/ui/turnstile';
 
+export const dynamic = 'force-dynamic';
+
 export default function ScanPage() {
   const { address, isConnected } = useAccount();
   const router = useRouter();

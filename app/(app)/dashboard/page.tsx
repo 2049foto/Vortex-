@@ -10,6 +10,8 @@ import { useRouter } from 'next/navigation';
 import { Dashboard } from '@/ui-components/dashboard';
 import { getUserHistory } from '@/lib/api';
 
+export const dynamic = 'force-dynamic';
+
 export default function DashboardPage() {
   const router = useRouter();
   const [history, setHistory] = useState<any>(null);
@@ -17,9 +19,8 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   
-  // Only use wagmi hooks after mount to avoid SSR issues
-  const accountResult = mounted ? useAccount() : { address: undefined, isConnected: false };
-  const { address, isConnected } = accountResult;
+  // Always call hooks, but only use values after mount
+  const { address, isConnected } = useAccount();
 
   useEffect(() => {
     setMounted(true);
@@ -27,7 +28,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!mounted || !address) {
-      setIsLoading(false);
+      if (mounted) setIsLoading(false);
       return;
     }
 
