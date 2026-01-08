@@ -45,7 +45,10 @@ export const supportedChains = [
 // Connectors - only initialize on client
 const getConnectors = () => {
   const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '69915bbd15f146b792917c4f1a657139';
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://dust-sweeper-yrjq.vercel.app';
+  // Use current origin for WalletConnect metadata to avoid URL mismatch
+  const appUrl = typeof window !== 'undefined' 
+    ? window.location.origin 
+    : process.env.NEXT_PUBLIC_APP_URL || 'https://dust-sweeper-yrjq.vercel.app';
   
   // Skip WalletConnect on server to avoid indexedDB error
   if (typeof window === 'undefined') {

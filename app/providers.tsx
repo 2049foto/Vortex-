@@ -29,13 +29,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
-  if (!mounted) {
-    return <>{children}</>;
-  }
-
+  // Always render WagmiProvider, but children will handle their own loading states
   return (
     <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        {mounted ? children : (
+          <div className="flex min-h-screen items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Initializing...</p>
+            </div>
+          </div>
+        )}
+      </QueryClientProvider>
     </WagmiProvider>
   );
 }

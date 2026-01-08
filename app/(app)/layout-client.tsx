@@ -5,18 +5,14 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAccount } from 'wagmi';
 import { Navbar } from '@/components/layout/navbar';
 import { WalletModal } from '@/components/wallet/wallet-modal';
 import { BottomNav } from '@/components/layout/bottom-nav';
 
-export function AppLayoutClient({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function LayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { address, isConnected } = useAccount();
@@ -65,4 +61,30 @@ export function AppLayoutClient({
       />
     </div>
   );
+}
+
+export function AppLayoutClient({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Wait for WagmiProvider to be ready
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <LayoutContent>{children}</LayoutContent>;
 }
