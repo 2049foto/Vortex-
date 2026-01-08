@@ -14,28 +14,46 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../co
 import { Badge } from '../components/ui/Badge';
 import { Stepper, StepperMini } from '../components/Stepper';
 import { ShareButtons } from '../components/ShareButtons';
-import { MOCK_ROUTES, MOCK_CONSOLIDATION_STEPS, MOCK_ASSETS } from '../constants/mockData';
-import { OutputToken, ConsolidationRoute, ConsolidationStep } from '../types';
+import { OutputToken, ConsolidationRoute, ConsolidationStep, Asset } from '../types';
 import { cn } from '../utils/cn';
+
+// Default routes
+const DEFAULT_ROUTES: ConsolidationRoute[] = [
+  { id: 'best', name: '1inch Aggregator', estimatedOutput: '0.00', estimatedGas: '$0.00', priceImpact: 0.1, isRecommended: true },
+  { id: 'uniswap', name: 'Uniswap V4', estimatedOutput: '0.00', estimatedGas: '$0.00', priceImpact: 0.2, isRecommended: false },
+  { id: 'curve', name: 'Curve', estimatedOutput: '0.00', estimatedGas: '$0.00', priceImpact: 0.15, isRecommended: false },
+];
+
+const DEFAULT_STEPS: ConsolidationStep[] = [
+  { id: '1', label: 'Simulating', description: 'Running transaction simulation', status: 'pending' },
+  { id: '2', label: 'Approving', description: 'Token approvals', status: 'pending' },
+  { id: '3', label: 'Executing', description: 'Swapping tokens', status: 'pending' },
+  { id: '4', label: 'Confirming', description: 'Waiting for confirmation', status: 'pending' },
+];
 
 interface ConsolidatePageProps {
   onShowToast: (type: 'success' | 'error' | 'warning' | 'info', title: string, message?: string) => void;
+  selectedAssets?: Asset[];
 }
 
 type ConsolidationPhase = 'configure' | 'simulating' | 'executing' | 'complete';
 
-export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
+export function ConsolidatePage({ onShowToast, selectedAssets = [] }: ConsolidatePageProps) {
   const router = useRouter();
 
-  // Mock selected assets (in real app, this would come from state/context)
-  const selectedAssets = MOCK_ASSETS.filter(a => a.tier === 'DUST' || a.tier === 'MICRODUST');
-  const totalValue = selectedAssets.reduce((sum, a) => sum + a.valueUSD, 0);
+  const totalValue = selectedAssets.reduce((sum, a) => sum + (a.valueUSD || 0), 0);
+  const estimatedOutput = (totalValue * 0.995 / 3500).toFixed(6);
+  
+  const availableRoutes: ConsolidationRoute[] = DEFAULT_ROUTES.map((route, idx) => ({
+    ...route,
+    estimatedOutput: (parseFloat(estimatedOutput) * (1 - idx * 0.005)).toFixed(6),
+  }));
 
   // State
   const [outputToken, setOutputToken] = useState<OutputToken>('ETH');
-  const [selectedRoute, setSelectedRoute] = useState<ConsolidationRoute | null>(MOCK_ROUTES[0]);
+  const [selectedRoute, setSelectedRoute] = useState<ConsolidationRoute | null>(availableRoutes[0]);
   const [phase, setPhase] = useState<ConsolidationPhase>('configure');
-  const [steps, setSteps] = useState<ConsolidationStep[]>(MOCK_CONSOLIDATION_STEPS);
+  const [steps, setSteps] = useState<ConsolidationStep[]>(DEFAULT_STEPS);
   const [currentStep, setCurrentStep] = useState(0);
   const [showRouteDropdown, setShowRouteDropdown] = useState(false);
 
@@ -43,7 +61,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
   const runSimulation = useCallback(async () => {
     setPhase('simulating');
 
-    // Simulate step progression
     for (let i = 0; i < steps.length; i++) {
       setCurrentStep(i);
       setSteps(prev => prev.map((s, idx) => ({
@@ -53,7 +70,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
 
-    // Complete all steps
     setSteps(prev => prev.map(s => ({ ...s, status: 'complete' })));
     setPhase('complete');
     onShowToast('success', 'Consolidation Complete!', `Successfully consolidated ${selectedAssets.length} assets.`);
@@ -70,7 +86,7 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
   const handleCancel = useCallback(() => {
     if (phase === 'simulating' || phase === 'executing') {
       setPhase('configure');
-      setSteps(MOCK_CONSOLIDATION_STEPS);
+      setSteps(DEFAULT_STEPS);
       setCurrentStep(0);
       onShowToast('info', 'Cancelled', 'Consolidation process cancelled.');
     }
@@ -103,7 +119,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Back Button */}
       {phase === 'configure' && (
         <button
           onClick={() => router.push('/scan')}
@@ -114,7 +129,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
         </button>
       )}
 
-      {/* Page Header */}
       <div className="mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
           {phase === 'complete' ? 'Consolidation Complete!' : 'Consolidate Assets'}
@@ -128,7 +142,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
       </div>
 
       <AnimatePresence mode="wait">
-        {/* Configuration Phase */}
         {phase === 'configure' && (
           <motion.div
             key="configure"
@@ -137,7 +150,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
             exit={{ opacity: 0, y: -20 }}
             className="space-y-6"
           >
-            {/* Selected Assets Summary */}
             <Card>
               <CardHeader>
                 <CardTitle>Selected Assets</CardTitle>
@@ -147,9 +159,9 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
-                  {selectedAssets.slice(0, 5).map(asset => (
+                  {selectedAssets.slice(0, 5).map((asset: Asset) => (
                     <Badge key={asset.id} variant="muted">
-                      {asset.symbol} (${asset.valueUSD.toFixed(2)})
+                      {asset.symbol} (${(asset.valueUSD || 0).toFixed(2)})
                     </Badge>
                   ))}
                   {selectedAssets.length > 5 && (
@@ -163,7 +175,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
               </CardContent>
             </Card>
 
-            {/* Output Token Selection */}
             <Card>
               <CardHeader>
                 <CardTitle>Output Token</CardTitle>
@@ -196,7 +207,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
               </CardContent>
             </Card>
 
-            {/* Route Selection */}
             <Card>
               <CardHeader>
                 <CardTitle>Swap Route</CardTitle>
@@ -248,7 +258,7 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
                           exit={{ opacity: 0, y: 8, scale: 0.95 }}
                           className="absolute left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden"
                         >
-                          {MOCK_ROUTES.map(route => (
+                          {availableRoutes.map((route: ConsolidationRoute) => (
                             <button
                               key={route.id}
                               onClick={() => {
@@ -284,7 +294,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
               </CardContent>
             </Card>
 
-            {/* Trust Indicators */}
             <Card variant="glass">
               <CardContent className="flex flex-wrap items-center justify-center gap-6 py-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -302,7 +311,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
               </CardContent>
             </Card>
 
-            {/* Action Button */}
             <Button
               variant="primary"
               size="lg"
@@ -315,7 +323,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
           </motion.div>
         )}
 
-        {/* Simulating/Executing Phase */}
         {(phase === 'simulating' || phase === 'executing') && (
           <motion.div
             key="executing"
@@ -352,7 +359,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
           </motion.div>
         )}
 
-        {/* Complete Phase */}
         {phase === 'complete' && (
           <motion.div
             key="complete"
@@ -377,7 +383,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
               </p>
             </Card>
 
-            {/* Result Summary */}
             <Card variant="elevated">
               <CardContent className="space-y-4">
                 <div className="flex justify-between">
@@ -399,7 +404,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
               </CardContent>
             </Card>
 
-            {/* Share */}
             <Card>
               <CardHeader>
                 <CardTitle>Share Your Achievement</CardTitle>
@@ -412,7 +416,6 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
               </CardContent>
             </Card>
 
-            {/* Actions */}
             <div className="flex gap-4">
               <Button variant="outline" className="flex-1" onClick={() => router.push('/dashboard')}>
                 View Dashboard
@@ -429,4 +432,3 @@ export function ConsolidatePage({ onShowToast }: ConsolidatePageProps) {
 }
 
 export default ConsolidatePage;
-

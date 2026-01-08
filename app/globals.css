@@ -1,91 +1,130 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100;200;300;400;500;600;700;800;900&display=swap');
-@import url('https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Base Colors - Safe, Secure, Premium */
-  --background: 210 40% 98%; /* Light Cool Gray */
-  --foreground: 222 47% 11%; /* Deep Navy */
+  /* Base Colors - Premium Dark Mode First */
+  --background: 225 15% 6%; /* Deep Charcoal */
+  --foreground: 210 40% 98%; /* Clean White */
   
-  /* Primary - Trustworthy Indigo */
-  --primary: 245 80% 60%;
+  /* Primary - Electric Indigo */
+  --primary: 245 85% 62%;
   --primary-foreground: 0 0% 100%;
   
-  /* Secondary - Professional Gunmetal */
-  --secondary: 215 25% 95%;
-  --secondary-foreground: 222 47% 11%;
+  /* Secondary - Neutral Slate */
+  --secondary: 220 20% 12%;
+  --secondary-foreground: 210 40% 98%;
   
-  /* Accent - Secure Emerald */
-  --accent: 150 60% 45%;
+  /* Accent - Vibrant Emerald */
+  --accent: 160 70% 42%;
   --accent-foreground: 0 0% 100%;
   
   /* Destructive - Alert Red */
-  --destructive: 0 84% 60%;
+  --destructive: 0 75% 55%;
   --destructive-foreground: 0 0% 100%;
   
-  /* Muted - Subtle Text */
-  --muted: 215 16% 47%;
-  --muted-foreground: 215 16% 47%;
+  /* Warning - Amber */
+  --warning: 38 92% 50%;
+  --warning-foreground: 0 0% 0%;
+  
+  /* Muted - Soft Gray */
+  --muted: 220 15% 25%;
+  --muted-foreground: 220 15% 60%;
   
   /* Card & Popover */
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
+  --card: 225 15% 8%;
+  --card-foreground: 210 40% 98%;
+  --popover: 225 15% 10%;
+  --popover-foreground: 210 40% 98%;
   
   /* Borders & Rings */
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 245 80% 60%;
+  --border: 220 15% 18%;
+  --input: 220 15% 15%;
+  --ring: 245 85% 62%;
   
   /* Radius */
-  --radius: 1rem;
+  --radius: 0.875rem;
+  
+  /* Responsive Base */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-.dark {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 0 0% 98%;
-  --primary-foreground: 240 5.9% 10%;
-  --secondary: 240 3.7% 15.9%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 240 3.7% 15.9%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 240 4.9% 83.9%;
+/* Light Mode */
+.light {
+  --background: 210 30% 98%;
+  --foreground: 225 15% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 225 15% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 225 15% 10%;
+  --primary: 245 85% 58%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 15% 94%;
+  --secondary-foreground: 225 15% 10%;
+  --muted: 220 15% 90%;
+  --muted-foreground: 220 15% 45%;
+  --accent: 160 70% 38%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 75% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 15% 88%;
+  --input: 220 15% 92%;
+  --ring: 245 85% 58%;
 }
 
 * {
   @apply border-border;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   @apply bg-background text-foreground;
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  line-height: 1.6;
+  min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile */
+  padding-top: var(--safe-area-top);
+  padding-bottom: var(--safe-area-bottom);
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Clash Display', sans-serif;
-  letter-spacing: -0.02em;
+  font-family: 'Space Grotesk', 'Outfit', sans-serif;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* Ensure readable text on all devices */
+p, span, li, a, label {
+  font-size: clamp(0.875rem, 2.5vw, 1rem);
+}
+
+/* Improve touch targets for mobile */
+button, a, input, select, textarea {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+button {
+  touch-action: manipulation;
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -93,12 +132,22 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted) / 0.3);
-  border-radius: 4px;
+  background: hsl(var(--muted) / 0.4);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted) / 0.5);
+  background: hsl(var(--muted) / 0.6);
+}
+
+/* Hide scrollbar on mobile for cleaner look */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Animations */
@@ -114,7 +163,27 @@ h1, h2, h3, h4, h5, h6 {
 
 @keyframes float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px hsl(var(--primary) / 0.3); }
+  50% { box-shadow: 0 0 40px hsl(var(--primary) / 0.5); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .animate-gradient-x {
@@ -128,5 +197,89 @@ h1, h2, h3, h4, h5, h6 {
 
 .animate-shimmer {
   animation: shimmer 2s infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.5s ease-out forwards;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}
+
+/* Farcaster Frame v2 Specific Styles */
+@media (max-height: 695px) {
+  /* Frame v2 compact mode */
+  .frame-compact {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+  
+  .frame-compact h1 {
+    font-size: 1.5rem !important;
+  }
+  
+  .frame-compact h2 {
+    font-size: 1.25rem !important;
+  }
+}
+
+/* Mobile optimizations */
+@media (max-width: 640px) {
+  body {
+    font-size: 15px;
+  }
+  
+  h1 {
+    font-size: clamp(1.5rem, 6vw, 2.5rem);
+  }
+  
+  h2 {
+    font-size: clamp(1.25rem, 5vw, 2rem);
+  }
+  
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Safe area utilities */
+.safe-top {
+  padding-top: max(1rem, env(safe-area-inset-top));
+}
+
+.safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 

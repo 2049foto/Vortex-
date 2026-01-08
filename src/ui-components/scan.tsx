@@ -15,7 +15,6 @@ import { AssetCard } from './components/AssetCard';
 import { ChainSelector } from './components/ChainChip';
 import { EmptyState } from './components/ui/EmptyState';
 import { SkeletonAssetCard } from './components/ui/Skeleton';
-import { MOCK_ASSETS } from './constants/mockData';
 import { EVM_CHAINS, CHAINS } from './constants/chains';
 import { Asset, RiskTier } from './types';
 import { cn } from './utils/cn';
@@ -39,7 +38,7 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
   const [selectedChains, setSelectedChains] = useState<string[]>(['base', 'ethereum', 'arbitrum', 'optimism', 'polygon']);
   const [assets, setAssets] = useState<Asset[]>([]);
 
-  // Simulate scanning
+  // Simulate scanning animation and set real data
   useEffect(() => {
     if (isScanning) {
       const interval = setInterval(() => {
@@ -48,8 +47,29 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
             clearInterval(interval);
             setTimeout(() => {
               setIsScanning(false);
-              // Use scan result if available, otherwise mock data
-              setAssets(scanResult?.tokens || MOCK_ASSETS);
+              // Transform scan result to Asset format
+              const transformedAssets: Asset[] = (scanResult?.tokens || []).map((token: any, idx: number) => ({
+                id: `${token.chainId}-${token.address}-${idx}`,
+                name: token.name || 'Unknown Token',
+                symbol: token.symbol || 'UNKNOWN',
+                balance: token.balanceFormatted || '0',
+                valueUSD: token.valueUsd || 0,
+                chainId: token.chainId || 8453,
+                contractAddress: token.address,
+                tier: determineTier(token),
+                liquidity: determineLiquidity(token.liquidityUsd),
+                logoUrl: token.logoUrl,
+                riskDetails: token.riskScore ? {
+                  score: token.riskScore.totalScore || 0,
+                  confidence: 85,
+                  factors: token.riskScore.reasons?.map((r: string) => ({
+                    name: r.split(':')[0] || r,
+                    description: r,
+                    severity: token.riskScore.totalScore > 70 ? 'critical' : token.riskScore.totalScore > 40 ? 'high' : 'medium',
+                  })) || [],
+                } : undefined,
+              }));
+              setAssets(transformedAssets);
             }, 800);
             return 100;
           }
@@ -59,6 +79,23 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
       return () => clearInterval(interval);
     }
   }, [isScanning, scanResult]);
+
+  // Helper functions to determine tier and liquidity
+  function determineTier(token: any): RiskTier {
+    if (token.riskScore?.tier) return token.riskScore.tier as RiskTier;
+    if (token.riskScore?.totalScore >= 70 || token.riskScore?.layers?.isHoneypot) return 'RISK_SCAM';
+    if (token.valueUsd < 0.1) return 'MICRODUST';
+    if (token.valueUsd < 10) return 'DUST';
+    return 'LEGIT';
+  }
+
+  function determineLiquidity(liquidityUsd?: number): 'high' | 'medium' | 'low' | 'none' {
+    if (!liquidityUsd) return 'none';
+    if (liquidityUsd > 100000) return 'high';
+    if (liquidityUsd > 10000) return 'medium';
+    if (liquidityUsd > 1000) return 'low';
+    return 'none';
+  }
 
   // Pre-select dust tokens once scan finishes
   useEffect(() => {

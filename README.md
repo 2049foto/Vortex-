@@ -1,294 +1,220 @@
-# 🌀 Vortex Protocol
+# Vortex Protocol
 
-> **Premium Portfolio Hygiene Engine** - Gasless consolidator optimized for Base
+**Premium Portfolio Hygiene Engine** — Gasless multi-chain consolidator optimized for Base
 
-[![License](https://img.shields.io/badge/license-Proprietary-blue.svg)](LICENSE)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-19-blue)](https://react.dev/)
-[![Bun](https://img.shields.io/badge/Bun-1.0-pink)](https://bun.sh/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
-[![Base](https://img.shields.io/badge/Optimized%20for-Base-blue)](https://base.org/)
-
-Clean your crypto portfolio gaslessly. Consolidate dust tokens, identify risks, and optimize your holdings on Base.
-
-**🎉 Phase 1 Complete - Production Ready**
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square)](https://www.typescriptlang.org/)
+[![Bun](https://img.shields.io/badge/Bun-1.1-F472B6?style=flat-square)](https://bun.sh/)
+[![Base](https://img.shields.io/badge/Chain-Base-0052FF?style=flat-square)](https://base.org/)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
 ---
 
-## ✨ Features
+## Overview
 
-### 🔍 **Smart Portfolio Scanning**
-- Multi-chain wallet analysis (10+ chains)
-- Real-time token balance tracking via Moralis
-- Comprehensive metadata and pricing
+Vortex Protocol enables users to clean and consolidate fragmented crypto portfolios across 11 chains (10 EVM + Solana) with zero gas fees. Built for the Base ecosystem, it features intelligent risk scoring, multi-DEX routing, and seamless Farcaster Frame v2 integration.
 
-### 🎯 **4-Tier Token Classification**
-- **LEGIT** - Safe, liquid tokens
-- **DUST** - Small value tokens ($0.10-$10)
-- **MICRODUST** - Negligible value (<$0.10)
-- **RISK** - High-risk/scam tokens
+### Key Features
 
-### 🛡️ **20-Layer Risk Scoring**
-Advanced security analysis powered by GoPlus Labs:
-- **Security** (Layers 1-6): Honeypot, proxy, blacklist, mint, owner detection
-- **Liquidity** (Layers 7-10): Amount, locked status, pool age
-- **Trading** (Layers 11-14): Buy/sell taxes, tradability checks
-- **Market** (Layers 15-18): Holder concentration, volatility analysis
-- **Reputation** (Layers 19-20): Contract verification, social presence
-
-### 🔄 **Multi-Router Aggregation**
-Best price discovery across leading DEXs:
-- 1inch (primary aggregator)
-- Uniswap v4
-- Curve (stablecoin-optimized)
-- Balancer (multi-token pools)
-
-### ⚡ **Gasless Transactions**
-Dual paymaster strategy for maximum reliability:
-1. **Pimlico** (primary, all chains)
-2. **Coinbase Smart Wallet** (fallback, Base)
-→ Automatic failover ensures 99.9% success rate
-
-### 🎭 **Farcaster Mini App**
-Native social integration:
-- In-frame wallet scanning
-- Share results to feed
-- Real-time notifications
-- One-tap consolidation
-
-### 📊 **Grant Metrics Dashboard**
-Public analytics for Base ecosystem impact:
-- Total portfolios cleaned
-- Dust value consolidated
-- Base TVL added
-- Gas saved (USD)
-- Unique users served
+- **11-Chain Scanning** — Base, Ethereum, Arbitrum, Optimism, Polygon, BNB, Avalanche, Monad, zkSync, Solana
+- **20-Layer Risk Analysis** — GoPlus, Honeypot.is, DexScreener security checks
+- **Multi-DEX Aggregation** — 1inch, 0x/Uniswap, Curve, Balancer, Jupiter
+- **Gasless Execution** — Pimlico + Coinbase Smart Wallet paymasters
+- **Farcaster Integration** — Native Frame v2 support with notifications
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Frontend (Next.js 16 + React 19)              │
-│  - Landing, Scan, Execute, Success, Dashboard  │
-│  - Grant Metrics (Public)                      │
-│  - Wagmi v3 + Coinbase Smart Wallet            │
-└────────────────┬────────────────────────────────┘
-                 │ REST API
-┌────────────────▼────────────────────────────────┐
-│  Backend (Elysia.ts + Bun)                     │
-│  - JWT Auth, Rate Limiting, Turnstile          │
-│  - Portfolio, Risk, Consolidation Services     │
-│  - Multi-chain RPC with fallback               │
-└────────────────┬────────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────────┐
-│  Infrastructure                                 │
-│  - Neon PostgreSQL (Database)                  │
-│  - Upstash Redis (Cache)                       │
-│  - Pimlico (AA Bundler)                        │
-│  - Coinbase Paymaster (Base)                   │
-│  - Tenderly (Simulation)                       │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Frontend (Next.js 15)                    │
+│  Landing • Dashboard • Scan • Consolidate • Grant Metrics   │
+│           Wagmi v3 • Coinbase Smart Wallet • Framer         │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+┌───────────────────────────▼─────────────────────────────────┐
+│                    API Routes (Next.js)                     │
+│        /api/v1/scan • /api/v1/swap • /api/v1/status        │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+┌───────────────────────────▼─────────────────────────────────┐
+│                      Core Services                          │
+│  portfolioService • riskScoringService • consolidationSvc   │
+│       Multi-router • Tenderly simulation • Paymaster        │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+┌───────────────────────────▼─────────────────────────────────┐
+│                      Infrastructure                         │
+│   Neon PostgreSQL • Upstash Redis • Vercel Edge Functions   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
-- [Bun](https://bun.sh/) >= 1.0.0
-- Node.js >= 20.0.0
-- PostgreSQL (Neon recommended)
-- Redis (Upstash recommended)
+- [Bun](https://bun.sh/) ≥ 1.1
+- [Node.js](https://nodejs.org/) ≥ 20
 
-### Installation
+### Setup
 
 ```bash
-# Clone repository
+# Clone
 git clone https://github.com/2049foto/Vortex-.git
 cd Vortex-
 
-# Install dependencies
+# Install
 bun install
 
-# Setup environment
+# Configure environment
 cp .env.example .env.local
-# Fill in your API keys (see Environment Variables section)
+# Edit .env.local with your API keys
 
-# Setup database
+# Database migration
 bun db:push
 
-# Run development
-bun dev:all
+# Development
+bun dev
 ```
 
-### Development URLs
+### Environment Variables
 
-- **Frontend**: http://localhost:3000
-- **API Server**: http://localhost:3001
-- **API Docs**: http://localhost:3001/docs
-- **Grant Metrics**: http://localhost:3000/grant-metrics
+Required variables for production:
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | Neon PostgreSQL connection string |
+| `UPSTASH_REDIS_REST_URL` | Redis cache URL |
+| `UPSTASH_REDIS_REST_TOKEN` | Redis auth token |
+| `MORALIS_API_KEY` | Token data API |
+| `GOPLUS_API_KEY` | Security analysis |
+| `PIMLICO_API_KEY` | AA bundler |
+| `NEXT_PUBLIC_CDP_PAYMASTER_URL` | Coinbase paymaster |
+| `ONEINCH_API_KEY` | 1inch DEX aggregator |
+| `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | Wallet connection |
+| `JWT_SECRET` | Session encryption |
 
 ---
 
-## 🔧 Environment Variables
+## API Endpoints
 
-### Required
-
-```env
-# Database
-DATABASE_URL=postgresql://...              # Neon PostgreSQL
-
-# Cache
-UPSTASH_REDIS_REST_URL=https://...        # Upstash Redis
-UPSTASH_REDIS_REST_TOKEN=...
-
-# Account Abstraction
-PIMLICO_API_KEY=...                       # Pimlico bundler
-NEXT_PUBLIC_CDP_PAYMASTER_URL=...         # Coinbase paymaster
-
-# Data APIs
-MORALIS_API_KEY=...                       # Token data
-GOPLUS_API_KEY=...                        # Risk scoring
-
-# Wallet Connection
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...
-
-# Security
-TURNSTILE_SECRET_KEY=...                  # Cloudflare Turnstile
-JWT_SECRET=...                            # Generate with: openssl rand -base64 32
-```
-
-See [.env.example](.env.example) for complete list.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/scan` | POST | Scan wallet for tokens |
+| `/api/v1/swap` | POST | Execute consolidation |
+| `/api/v1/status/:id` | GET | Check transaction status |
+| `/api/v1/user/history` | GET | User activity history |
+| `/api/v1/analytics/dashboard` | GET | Grant metrics data |
 
 ---
 
-## 📦 Deployment
+## Supported Chains
 
-### Frontend (Vercel)
+| Chain | ID | Native Token |
+|-------|-----|--------------|
+| Base | 8453 | ETH |
+| Ethereum | 1 | ETH |
+| Arbitrum | 42161 | ETH |
+| Optimism | 10 | ETH |
+| Polygon | 137 | MATIC |
+| BNB Chain | 56 | BNB |
+| Avalanche | 43114 | AVAX |
+| Monad | 838592 | MONAD |
+| zkSync Era | 324 | ETH |
+| Solana | - | SOL |
+
+---
+
+## Tech Stack
+
+| Layer | Technologies |
+|-------|--------------|
+| Frontend | Next.js 15, React 19, TailwindCSS, Framer Motion |
+| State | Zustand, React Query |
+| Web3 | Wagmi v3, Viem, Coinbase Smart Wallet |
+| Backend | Next.js API Routes, Drizzle ORM |
+| Database | Neon PostgreSQL, Upstash Redis |
+| Security | GoPlus, Honeypot.is, Tenderly |
+| DEX | 1inch, 0x, Curve, Balancer, Jupiter |
+| AA | Pimlico, Coinbase Paymaster |
+| Analytics | PostHog, Sentry |
+
+---
+
+## Deployment
+
+### Vercel (Recommended)
 
 ```bash
-# Install Vercel CLI
-bun add -g vercel
-
-# Deploy
 vercel --prod
 ```
 
-### Backend (Fly.io)
+Add all environment variables in Vercel dashboard → Settings → Environment Variables.
+
+### Docker
 
 ```bash
-# Install Fly CLI
-curl -L https://fly.io/install.sh | sh
-
-# Login and deploy
-fly auth login
-fly deploy
-
-# Set secrets
-fly secrets set DATABASE_URL=postgresql://...
-fly secrets set UPSTASH_REDIS_REST_URL=https://...
-# ... (add all backend secrets)
+docker build -t vortex-protocol .
+docker run -p 3000:3000 --env-file .env.local vortex-protocol
 ```
 
 ---
 
-## 📚 Documentation
+## Project Structure
 
-- **[README_PHASE1.md](README_PHASE1.md)** - Complete setup & deployment guide
-- **[PHASE1_COMPLETE.md](PHASE1_COMPLETE.md)** - Completion checklist
-- **[API Documentation](http://localhost:3001/docs)** - Swagger/OpenAPI docs
-- **[Environment Setup](ENV_SETUP_SUMMARY.md)** - Detailed environment guide
-
----
-
-## 🎯 Phase 1 Status
-
-✅ **COMPLETE - PRODUCTION READY**
-
-| Component | Status | Files | Features |
-|-----------|--------|-------|----------|
-| Backend Core | ✅ Complete | 32 | Database, Config, Utils, Middleware |
-| Blockchain | ✅ Complete | 6 | Pimlico, Coinbase, Tenderly, Multi-router |
-| Services | ✅ Complete | 4 | Portfolio, Risk (20 layers), Consolidation |
-| API Routes | ✅ Complete | 6 | Scan, Swap, Status, History, Analytics, Frame |
-| Frontend | ✅ Complete | 6 pages | Full UI with Web3 integration |
-| Farcaster | ✅ Complete | 1 | Frame + Notifications |
-| Deployment | ✅ Complete | - | Vercel, Fly.io, Docs |
-
-**31/31 Tasks Complete** 🎉
+```
+.
+├── app/                    # Next.js App Router
+│   ├── api/v1/            # API routes
+│   ├── dashboard/         # Dashboard page
+│   ├── scan/              # Scan page
+│   ├── consolidate/       # Consolidation page
+│   └── grant-metrics/     # Public metrics
+├── src/
+│   ├── blockchain/        # Chain configs, routers
+│   ├── components/        # React components
+│   ├── config/            # Environment, constants
+│   ├── db/                # Drizzle schema, client
+│   ├── lib/               # Utilities, API client
+│   ├── middleware/        # Auth, rate limiting
+│   ├── services/          # Business logic
+│   └── ui-components/     # SuperDesign components
+└── public/                # Static assets
+```
 
 ---
 
-## 🛣️ Roadmap
+## Contributing
 
-### Phase 2 (Q1 2026)
-- [ ] OnchainKit Checkout integration
-- [ ] Advanced analytics & cohort analysis
-- [ ] Multi-wallet portfolio aggregation
-- [ ] Scheduled consolidation (cron jobs)
+Contributions are welcome. Please open an issue first to discuss proposed changes.
 
-### Phase 3 (Q2 2026)
-- [ ] Mobile app (React Native)
-- [ ] Carbon offset integration
-- [ ] Gamification (achievements, leaderboard)
-- [ ] Social features (referrals, sharing)
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing`)
+5. Open Pull Request
 
 ---
 
-## 🏆 Key Metrics
+## License
 
-| Metric | Value |
-|--------|-------|
-| TypeScript Files | 1,433 |
-| API Endpoints | 6 |
-| Supported Chains | 10 |
-| Risk Scoring Layers | 20 |
-| DEX Routers | 4 |
-| Database Tables | 5 |
+MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-## 🤝 Contributing
+## Links
 
-This is a proprietary project. For collaboration inquiries, please contact the team.
-
----
-
-## 📄 License
-
-Proprietary - All rights reserved
-
----
-
-## 🔗 Links
-
-- **Website**: [vortex.build](https://vortex.build) *(coming soon)*
-- **Twitter**: [@VortexProtocol](https://twitter.com/VortexProtocol) *(coming soon)*
-- **Farcaster**: [warpcast.com/vortex](https://warpcast.com/vortex) *(coming soon)*
-- **Base Grant**: Application pending
-
----
-
-## 🙏 Acknowledgments
-
-Built for the Base ecosystem with support from:
-- [Base](https://base.org/) - L2 blockchain platform
-- [Coinbase](https://www.coinbase.com/) - Smart Wallet infrastructure
-- [Pimlico](https://pimlico.io/) - Account Abstraction bundler
-- [Moralis](https://moralis.io/) - Web3 data APIs
-- [GoPlus Labs](https://gopluslabs.io/) - Token security APIs
+- **Live App**: [vortex-protocol.vercel.app](https://vortex-protocol.vercel.app)
+- **GitHub**: [github.com/2049foto/Vortex-](https://github.com/2049foto/Vortex-)
+- **Base Ecosystem**: [base.org](https://base.org)
 
 ---
 
 <div align="center">
 
-**Built with ❤️ for the Base ecosystem 🔵**
-
-Ready to clean your portfolio? [Get Started →](https://vortex.build)
+Built for the Base ecosystem 🔵
 
 </div>
-

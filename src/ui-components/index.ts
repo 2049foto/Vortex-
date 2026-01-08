@@ -11,7 +11,6 @@ export { cn } from './utils/cn';
 
 // Constants
 export { CHAINS, EVM_CHAINS, SUPPORTED_CHAIN_IDS, DEFAULT_SELECTED_CHAINS, getChainById, getChainByStringId } from './constants/chains';
-export { MOCK_ASSETS, MOCK_USER_STATS, MOCK_ACTIVITY, MOCK_ROUTES, MOCK_CONSOLIDATION_STEPS, MOCK_SETTINGS } from './constants/mockData';
 
 // UI Components
 export { Button } from './components/ui/Button';

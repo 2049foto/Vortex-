@@ -15,12 +15,24 @@ import {
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { MOCK_USER_STATS, MOCK_ACTIVITY } from '../constants/mockData';
 import { CHAINS } from '../constants/chains';
+import { UserStats, Activity } from '../types';
 import { cn } from '../utils/cn';
+
+// Default stats
+const DEFAULT_STATS: UserStats = {
+  xp: 0,
+  level: 1,
+  dustFoundUSD: 0,
+  baseTVLAdded: 0,
+  portfoliosCleaned: 0,
+  streak: 0,
+};
 
 interface DashboardPageProps {
   walletAddress?: string;
+  stats?: UserStats;
+  activities?: Activity[];
 }
 
 // Helper function to format time distance
@@ -36,10 +48,8 @@ function formatTimeAgo(date: Date): string {
   return `${days} days ago`;
 }
 
-export function DashboardPage({ walletAddress }: DashboardPageProps) {
+export function DashboardPage({ walletAddress, stats = DEFAULT_STATS, activities = [] }: DashboardPageProps) {
   const router = useRouter();
-  const stats = MOCK_USER_STATS;
-  const activities = MOCK_ACTIVITY;
 
   // XP progress calculation
   const xpForNextLevel = stats.level * 250;
@@ -50,28 +60,28 @@ export function DashboardPage({ walletAddress }: DashboardPageProps) {
     {
       icon: Sparkles,
       label: 'Dust Found',
-      value: `$${stats.dustFoundUSD.toFixed(2)}`,
+      value: `$${(stats.dustFoundUSD || 0).toFixed(2)}`,
       color: 'text-amber-500',
       bgColor: 'bg-amber-500/10',
     },
     {
       icon: TrendingUp,
       label: 'Base TVL Added',
-      value: `$${stats.baseTVLAdded.toFixed(2)}`,
+      value: `$${(stats.baseTVLAdded || 0).toFixed(2)}`,
       color: 'text-accent',
       bgColor: 'bg-accent/10',
     },
     {
       icon: Clock,
       label: 'Portfolios Cleaned',
-      value: stats.portfoliosCleaned.toString(),
+      value: (stats.portfoliosCleaned || 0).toString(),
       color: 'text-primary',
       bgColor: 'bg-primary/10',
     },
     {
       icon: Flame,
       label: 'Current Streak',
-      value: `${stats.streak} days`,
+      value: `${stats.streak || 0} days`,
       color: 'text-orange-500',
       bgColor: 'bg-orange-500/10',
     },
@@ -127,19 +137,19 @@ export function DashboardPage({ walletAddress }: DashboardPageProps) {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Current Level</p>
-                    <p className="text-2xl font-bold text-foreground">Level {stats.level}</p>
+                    <p className="text-2xl font-bold text-foreground">Level {stats.level || 1}</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-muted-foreground">Total XP</p>
-                  <p className="text-xl font-semibold text-foreground">{stats.xp.toLocaleString()}</p>
+                  <p className="text-xl font-semibold text-foreground">{(stats.xp || 0).toLocaleString()}</p>
                 </div>
               </div>
 
               {/* XP Progress Bar */}
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Progress to Level {stats.level + 1}</span>
+                  <span className="text-muted-foreground">Progress to Level {(stats.level || 1) + 1}</span>
                   <span className="text-foreground font-medium">{xpNeeded} XP needed</span>
                 </div>
                 <div className="h-3 bg-muted rounded-full overflow-hidden">
@@ -187,9 +197,10 @@ export function DashboardPage({ walletAddress }: DashboardPageProps) {
             </CardHeader>
             <CardContent className="space-y-3">
               {activities.length > 0 ? (
-                activities.map((activity, index) => {
+                activities.map((activity: Activity, index: number) => {
                   const Icon = getActivityIcon(activity.type);
                   const chain = CHAINS[activity.chainId];
+                  const activityDate = activity.date instanceof Date ? activity.date : new Date(activity.date);
                   return (
                     <motion.div
                       key={activity.id}
@@ -210,7 +221,7 @@ export function DashboardPage({ walletAddress }: DashboardPageProps) {
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {formatTimeAgo(activity.date)}
+                          {formatTimeAgo(activityDate)}
                         </p>
                       </div>
                       {activity.amountUSD > 0 && (
@@ -235,6 +246,9 @@ export function DashboardPage({ walletAddress }: DashboardPageProps) {
               ) : (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground">No activity yet. Start your first scan!</p>
+                  <Button variant="primary" size="sm" className="mt-4" onClick={() => router.push('/scan')}>
+                    Start Scanning
+                  </Button>
                 </div>
               )}
             </CardContent>
@@ -271,11 +285,11 @@ export function DashboardPage({ walletAddress }: DashboardPageProps) {
               <Button
                 variant="outline"
                 className="w-full justify-between"
-                onClick={() => router.push('/settings')}
+                onClick={() => router.push('/grant-metrics')}
               >
                 <span className="flex items-center gap-2">
-                  <Settings className="w-4 h-4" />
-                  Settings
+                  <TrendingUp className="w-4 h-4" />
+                  Grant Metrics
                 </span>
                 <ChevronRight className="w-4 h-4" />
               </Button>
@@ -326,4 +340,3 @@ export function DashboardPage({ walletAddress }: DashboardPageProps) {
 }
 
 export default DashboardPage;
-

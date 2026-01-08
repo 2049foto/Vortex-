@@ -13,9 +13,22 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './com
 import { Badge } from './components/ui/Badge';
 import { Stepper, StepperMini } from './components/Stepper';
 import { ShareButtons } from './components/ShareButtons';
-import { MOCK_ROUTES, MOCK_CONSOLIDATION_STEPS } from './constants/mockData';
 import { OutputToken, ConsolidationRoute, ConsolidationStep, Asset } from './types';
 import { cn } from './utils/cn';
+
+// Default routes (will be replaced with real API data)
+const DEFAULT_ROUTES: ConsolidationRoute[] = [
+  { id: 'best', name: '1inch Aggregator', estimatedOutput: '0.00', estimatedGas: '$0.00', priceImpact: 0.1, isRecommended: true },
+  { id: 'uniswap', name: 'Uniswap V4', estimatedOutput: '0.00', estimatedGas: '$0.00', priceImpact: 0.2, isRecommended: false },
+  { id: 'curve', name: 'Curve', estimatedOutput: '0.00', estimatedGas: '$0.00', priceImpact: 0.15, isRecommended: false },
+];
+
+const DEFAULT_STEPS: ConsolidationStep[] = [
+  { id: '1', label: 'Simulating', description: 'Running transaction simulation', status: 'pending' },
+  { id: '2', label: 'Approving', description: 'Token approvals', status: 'pending' },
+  { id: '3', label: 'Executing', description: 'Swapping tokens', status: 'pending' },
+  { id: '4', label: 'Confirming', description: 'Waiting for confirmation', status: 'pending' },
+];
 
 interface ConsolidateProps {
   address?: string;
@@ -31,11 +44,20 @@ type ConsolidationPhase = 'configure' | 'simulating' | 'executing' | 'complete';
 export function Consolidate({ address, tokens = [], isExecuting, error, onExecute, onNavigate }: ConsolidateProps) {
   const totalValue = tokens.reduce((sum, a) => sum + (a.valueUSD || 0), 0);
 
+  // Calculate estimated output based on total value
+  const estimatedOutput = (totalValue * 0.995 / 3500).toFixed(6); // Rough ETH estimation (minus 0.5% slippage)
+  
+  // Generate routes with actual estimates
+  const availableRoutes: ConsolidationRoute[] = DEFAULT_ROUTES.map((route, idx) => ({
+    ...route,
+    estimatedOutput: (parseFloat(estimatedOutput) * (1 - idx * 0.005)).toFixed(6), // Slight variation per route
+  }));
+
   // State
   const [outputToken, setOutputToken] = useState<OutputToken>('ETH');
-  const [selectedRoute, setSelectedRoute] = useState<ConsolidationRoute | null>(MOCK_ROUTES[0]);
+  const [selectedRoute, setSelectedRoute] = useState<ConsolidationRoute | null>(availableRoutes[0]);
   const [phase, setPhase] = useState<ConsolidationPhase>('configure');
-  const [steps, setSteps] = useState<ConsolidationStep[]>(MOCK_CONSOLIDATION_STEPS);
+  const [steps, setSteps] = useState<ConsolidationStep[]>(DEFAULT_STEPS);
   const [currentStep, setCurrentStep] = useState(0);
   const [showRouteDropdown, setShowRouteDropdown] = useState(false);
 
@@ -76,7 +98,7 @@ export function Consolidate({ address, tokens = [], isExecuting, error, onExecut
   const handleCancel = useCallback(() => {
     if (phase === 'simulating' || phase === 'executing') {
       setPhase('configure');
-      setSteps(MOCK_CONSOLIDATION_STEPS);
+      setSteps(DEFAULT_STEPS);
       setCurrentStep(0);
     }
   }, [phase]);
@@ -263,7 +285,7 @@ export function Consolidate({ address, tokens = [], isExecuting, error, onExecut
                           exit={{ opacity: 0, y: 8, scale: 0.95 }}
                           className="absolute left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden"
                         >
-                          {MOCK_ROUTES.map(route => (
+                          {availableRoutes.map(route => (
                             <button
                               key={route.id}
                               onClick={() => {

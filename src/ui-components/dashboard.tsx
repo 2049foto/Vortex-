@@ -15,9 +15,18 @@ import { Button } from './components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from './components/ui/Card';
 import { Badge } from './components/ui/Badge';
 import { EmptyState } from './components/ui/EmptyState';
-import { MOCK_USER_STATS, MOCK_ACTIVITY } from './constants/mockData';
 import { CHAINS } from './constants/chains';
 import { cn } from './utils/cn';
+
+// Default stats when no history
+const DEFAULT_STATS = {
+  xp: 0,
+  level: 1,
+  dustFoundUSD: 0,
+  baseTVLAdded: 0,
+  portfoliosCleaned: 0,
+  streak: 0,
+};
 
 interface DashboardProps {
   address?: string;
@@ -41,9 +50,9 @@ function formatTimeAgo(date: Date): string {
 }
 
 export function Dashboard({ address, history, isLoading, error, onNavigate }: DashboardProps) {
-  // Use history data if available, otherwise mock data
-  const stats = history?.stats || MOCK_USER_STATS;
-  const activities = history?.activities || MOCK_ACTIVITY;
+  // Use history data if available, otherwise show empty/default state
+  const stats = history?.stats || DEFAULT_STATS;
+  const activities = history?.activities || [];
 
   // XP progress calculation
   const xpForNextLevel = stats.level * 250;
