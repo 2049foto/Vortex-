@@ -45,7 +45,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       onAnimationIteration,
       ...restProps
     } = props;
-    
+
     return (
       <motion.button
         whileTap={{ scale: 0.97 }}

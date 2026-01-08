@@ -108,7 +108,7 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
 
       {/* Mobile Menu */}
       <AnimatePresence>
-        {isMobileMenuOpen && (
+      {isMobileMenuOpen && (
           <motion.div
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -129,19 +129,19 @@ export function Navbar({ isConnected, onConnect, address }: NavbarProps) {
                 {link.name}
               </Link>
             ))}
-              <Button 
-                className="w-full h-12 rounded-xl text-lg mt-4" 
-                variant={isConnected ? "outline" : "premium"}
-                onClick={() => {
+            <Button 
+              className="w-full h-12 rounded-xl text-lg mt-4" 
+              variant={isConnected ? "outline" : "premium"}
+              onClick={() => {
                   onConnect?.();
-                  setIsMobileMenuOpen(false);
-                }}
-              >
-                {isConnected ? "Disconnect" : "Connect Wallet"}
-              </Button>
+                setIsMobileMenuOpen(false);
+              }}
+            >
+              {isConnected ? "Disconnect" : "Connect Wallet"}
+            </Button>
           </div>
           </motion.div>
-        )}
+      )}
       </AnimatePresence>
     </>
   );
