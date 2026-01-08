@@ -1,0 +1,18 @@
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjEsInR5cGUiOiJjdXN0b2R5IiwiYWRkcmVzcyI6IjB4MDAwMCJ9",
+    "payload": "eyJkb21haW4iOiJ2b3J0ZXguYnVpbGQifQ",
+    "signature": "0x0000"
+  },
+  "frame": {
+    "version": "1",
+    "name": "Vortex Protocol",
+    "iconUrl": "https://dust-sweeper-yrjq.vercel.app/logo.png",
+    "homeUrl": "https://dust-sweeper-yrjq.vercel.app",
+    "imageUrl": "https://dust-sweeper-yrjq.vercel.app/api/og/frame-intro",
+    "buttonTitle": "Clean My Wallet",
+    "splashImageUrl": "https://dust-sweeper-yrjq.vercel.app/api/og/frame-intro",
+    "splashBackgroundColor": "#1e1b4b",
+    "webhookUrl": "https://dust-sweeper-yrjq.vercel.app/api/frame/webhook"
+  }
+}

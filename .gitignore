@@ -105,7 +105,7 @@ dist
 
 # Gatsby files
 .cache/
-public
+# public - Removed: needed for Next.js static assets
 
 # vuepress build output
 .vuepress/dist
