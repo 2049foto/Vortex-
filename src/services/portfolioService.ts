@@ -289,20 +289,28 @@ async function fetchNativeBalance(
 ): Promise<TokenHolding | null> {
   try {
     const balance = await getEthBalance(chainId, walletAddress as `0x${string}`);
+    const balanceBigInt = BigInt(balance);
     
-    // Get native token price from CoinGecko
+    // Only return if balance > 0
+    if (balanceBigInt === 0n) {
+      return null;
+    }
+    
+    // Get native token price from CoinGecko (may be 0 if API fails)
     const priceUsd = await getNativeTokenPrice(chainId);
-    const balanceFormatted = (Number(balance) / 1e18).toFixed(18);
-    const valueUsd = parseFloat(balanceFormatted) * priceUsd;
+    const balanceFormatted = (Number(balanceBigInt) / 1e18).toString();
+    const valueUsd = parseFloat(balanceFormatted) * priceUsd; // May be 0 if price unavailable
 
     const nativeTokens: Record<number, { symbol: string; name: string }> = {
       1: { symbol: 'ETH', name: 'Ethereum' },
-      8453: { symbol: 'ETH', name: 'Ethereum' },
-      42161: { symbol: 'ETH', name: 'Ethereum' },
-      10: { symbol: 'ETH', name: 'Ethereum' },
+      8453: { symbol: 'ETH', name: 'Base' },
+      42161: { symbol: 'ETH', name: 'Arbitrum' },
+      10: { symbol: 'ETH', name: 'Optimism' },
       137: { symbol: 'MATIC', name: 'Polygon' },
-      56: { symbol: 'BNB', name: 'BNB' },
+      56: { symbol: 'BNB', name: 'BNB Chain' },
       43114: { symbol: 'AVAX', name: 'Avalanche' },
+      324: { symbol: 'ETH', name: 'zkSync Era' },
+      838592: { symbol: 'MONAD', name: 'Monad' },
     };
 
     const token = nativeTokens[chainId] || { symbol: 'ETH', name: 'Ethereum' };
@@ -313,10 +321,10 @@ async function fetchNativeBalance(
       symbol: token.symbol,
       name: token.name,
       decimals: 18,
-      balance: balance.toString(),
+      balance: balanceBigInt.toString(),
       balanceFormatted,
-      priceUsd,
-      valueUsd,
+      priceUsd, // May be 0
+      valueUsd, // May be 0 if price unavailable
       liquidityUsd: 0,
       volume24hUsd: 0,
     };
