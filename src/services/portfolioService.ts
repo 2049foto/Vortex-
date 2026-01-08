@@ -394,6 +394,9 @@ async function getNativeTokenPrice(chainId: number): Promise<number> {
 /**
  * MAINNET CHAIN IDS ONLY - No testnets
  * Critical: Never include testnet chain IDs
+ * 
+ * Monad (838592) is EXCLUDED because it's still a testnet as of Jan 2026
+ * Will be added when Monad mainnet launches
  */
 const MAINNET_CHAIN_IDS = [
   1,      // Ethereum Mainnet
@@ -404,7 +407,7 @@ const MAINNET_CHAIN_IDS = [
   56,     // BNB Smart Chain Mainnet
   43114,  // Avalanche C-Chain Mainnet
   324,    // zkSync Era Mainnet
-  838592, // Monad Mainnet (if available)
+  // 838592 - Monad is TESTNET only, do NOT include
 ];
 
 /**

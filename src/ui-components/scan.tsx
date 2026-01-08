@@ -41,21 +41,91 @@ interface ScanProps {
   onNavigate?: (path: string) => void;
 }
 
-// Chain data (MAINNET ONLY) - 11 Chains: 10 EVM + Solana
-const CHAINS: Record<number, { id: string; name: string; color: string; shortName: string; icon: string; gradient: string }> = {
-  1: { id: 'ethereum', name: 'Ethereum', color: 'bg-slate-600', shortName: 'ETH', icon: '⟠', gradient: 'from-slate-500 to-slate-700' },
-  8453: { id: 'base', name: 'Base', color: 'bg-blue-600', shortName: 'Base', icon: '🔵', gradient: 'from-blue-500 to-blue-700' },
-  42161: { id: 'arbitrum', name: 'Arbitrum', color: 'bg-blue-500', shortName: 'Arb', icon: '🔷', gradient: 'from-blue-400 to-blue-600' },
-  10: { id: 'optimism', name: 'Optimism', color: 'bg-red-500', shortName: 'OP', icon: '🔴', gradient: 'from-red-400 to-red-600' },
-  137: { id: 'polygon', name: 'Polygon', color: 'bg-purple-600', shortName: 'POL', icon: '💜', gradient: 'from-purple-500 to-purple-700' },
-  56: { id: 'bsc', name: 'BNB Chain', color: 'bg-yellow-500', shortName: 'BNB', icon: '💛', gradient: 'from-yellow-400 to-yellow-600' },
-  43114: { id: 'avalanche', name: 'Avalanche', color: 'bg-red-600', shortName: 'AVAX', icon: '🔺', gradient: 'from-red-500 to-red-700' },
-  324: { id: 'zksync', name: 'zkSync Era', color: 'bg-violet-600', shortName: 'zkS', icon: '⚡', gradient: 'from-violet-500 to-violet-700' },
-  838592: { id: 'monad', name: 'Monad', color: 'bg-emerald-600', shortName: 'MON', icon: '🟢', gradient: 'from-emerald-500 to-emerald-700' },
-  0: { id: 'solana', name: 'Solana', color: 'bg-gradient-to-r from-purple-500 to-teal-500', shortName: 'SOL', icon: '☀️', gradient: 'from-purple-500 to-teal-500' },
+// Chain data (MAINNET ONLY) - 9 Chains: 8 EVM + Solana
+// Monad excluded - still testnet as of Jan 2026
+const CHAINS: Record<number, { 
+  id: string; 
+  name: string; 
+  color: string; 
+  shortName: string; 
+  logoUrl: string;
+  gradient: string;
+}> = {
+  1: { 
+    id: 'ethereum', 
+    name: 'Ethereum', 
+    color: '#627EEA', 
+    shortName: 'ETH', 
+    logoUrl: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
+    gradient: 'from-slate-500 to-slate-700' 
+  },
+  8453: { 
+    id: 'base', 
+    name: 'Base', 
+    color: '#0052FF', 
+    shortName: 'Base', 
+    logoUrl: 'https://raw.githubusercontent.com/base-org/brand-kit/main/logo/symbol/Base_Symbol_Blue.png',
+    gradient: 'from-blue-500 to-blue-700' 
+  },
+  42161: { 
+    id: 'arbitrum', 
+    name: 'Arbitrum', 
+    color: '#28A0F0', 
+    shortName: 'ARB', 
+    logoUrl: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png',
+    gradient: 'from-blue-400 to-blue-600' 
+  },
+  10: { 
+    id: 'optimism', 
+    name: 'Optimism', 
+    color: '#FF0420', 
+    shortName: 'OP', 
+    logoUrl: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/optimism/info/logo.png',
+    gradient: 'from-red-400 to-red-600' 
+  },
+  137: { 
+    id: 'polygon', 
+    name: 'Polygon', 
+    color: '#8247E5', 
+    shortName: 'POL', 
+    logoUrl: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png',
+    gradient: 'from-purple-500 to-purple-700' 
+  },
+  56: { 
+    id: 'bsc', 
+    name: 'BNB Chain', 
+    color: '#F0B90B', 
+    shortName: 'BNB', 
+    logoUrl: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/binance/info/logo.png',
+    gradient: 'from-yellow-400 to-yellow-600' 
+  },
+  43114: { 
+    id: 'avalanche', 
+    name: 'Avalanche', 
+    color: '#E84142', 
+    shortName: 'AVAX', 
+    logoUrl: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/avalanchec/info/logo.png',
+    gradient: 'from-red-500 to-red-700' 
+  },
+  324: { 
+    id: 'zksync', 
+    name: 'zkSync Era', 
+    color: '#8C8DFC', 
+    shortName: 'zkS', 
+    logoUrl: 'https://zksync.io/favicon-32x32.png',
+    gradient: 'from-violet-500 to-violet-700' 
+  },
+  0: { 
+    id: 'solana', 
+    name: 'Solana', 
+    color: '#9945FF', 
+    shortName: 'SOL', 
+    logoUrl: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/solana/info/logo.png',
+    gradient: 'from-purple-500 to-teal-500' 
+  },
 };
 
-// All supported chain IDs
+// All supported chain IDs (mainnet only)
 const ALL_CHAIN_IDS = Object.keys(CHAINS).map(Number);
 
 type TabType = 'LEGIT' | 'DUST' | 'MICRODUST' | 'RISK_SCAM';
@@ -309,7 +379,19 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
                   isComplete && "bg-emerald-50"
                 )}
               >
-                <span className="text-lg mb-1">{chain.icon}</span>
+                <div 
+                  className="w-8 h-8 rounded-full overflow-hidden mb-1 flex items-center justify-center"
+                  style={{ backgroundColor: chain.color }}
+                >
+                  <img 
+                    src={chain.logoUrl} 
+                    alt={chain.shortName}
+                    className="w-6 h-6 object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
                 <span className={cn(
                   "text-[10px] font-medium",
                   isActive ? "text-indigo-600" : isComplete ? "text-emerald-600" : "text-slate-400"
@@ -446,7 +528,14 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
                             : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"
                         )}
                       >
-                        <span>{chain.icon}</span>
+                        <img 
+                          src={chain.logoUrl} 
+                          alt={chain.shortName}
+                          className="w-5 h-5 rounded-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${chain.shortName}&size=20`;
+                          }}
+                        />
                         <span>{chain.shortName}</span>
                         {tokenCount > 0 && (
                           <span className={cn(
@@ -693,11 +782,24 @@ function TokenCard({
             </div>
           )}
           {/* Chain badge */}
-          <div className={cn(
-            "absolute -bottom-1 -right-1 w-5 h-5 rounded-lg flex items-center justify-center text-xs border-2 border-white",
-            chain?.color || 'bg-slate-500'
-          )}>
-            <span>{chain?.icon?.slice(0, 1) || '?'}</span>
+          <div 
+            className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full overflow-hidden border-2 border-white shadow-sm"
+            style={{ backgroundColor: chain?.color || '#64748b' }}
+          >
+            {chain?.logoUrl ? (
+              <img 
+                src={chain.logoUrl} 
+                alt={chain.shortName}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <span className="text-[8px] text-white font-bold flex items-center justify-center w-full h-full">
+                {chain?.shortName?.slice(0, 1) || '?'}
+              </span>
+            )}
           </div>
         </div>
 
@@ -782,8 +884,15 @@ function TokenCard({
               </div>
               <div>
                 <span className="text-xs text-slate-500 block mb-1">Chain</span>
-                <span className="text-sm font-medium text-slate-900 flex items-center gap-1">
-                  {chain?.icon} {chain?.name || 'Unknown'}
+                <span className="text-sm font-medium text-slate-900 flex items-center gap-2">
+                  {chain?.logoUrl && (
+                    <img 
+                      src={chain.logoUrl} 
+                      alt={chain.shortName}
+                      className="w-4 h-4 rounded-full"
+                    />
+                  )}
+                  {chain?.name || 'Unknown'}
                 </span>
               </div>
               <div>

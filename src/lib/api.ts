@@ -81,7 +81,8 @@ export async function scanWallet(
     },
     body: JSON.stringify({ 
       walletAddress, 
-      chainIds: chainIds || [1, 8453, 42161, 10, 137, 56, 43114, 324, 838592], // Default to all chains
+      // Default to all MAINNET chains (Monad excluded - still testnet)
+      chainIds: chainIds || [1, 8453, 42161, 10, 137, 56, 43114, 324],
       turnstileToken: turnstileToken || null,
     }),
   });
@@ -92,9 +93,15 @@ export async function scanWallet(
  */
 export async function createConsolidation(params: {
   walletAddress: string;
-  tokenAddresses?: string[];
-  targetToken?: string;
-  chainId?: number;
+  selectedTokens: Array<{
+    address: string;
+    chainId: number;
+    symbol?: string;
+    valueUSD?: number;
+  }>;
+  outputToken?: 'ETH' | 'USDC';
+  dryRun?: boolean;
+  turnstileToken?: string | null;
 }): Promise<{
   success: boolean;
   data: {

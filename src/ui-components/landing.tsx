@@ -36,18 +36,17 @@ const staggerContainer = {
   }
 };
 
-// Chain data with logos
+// Chain data with official logos (MAINNET ONLY - Monad excluded as it's testnet)
 const CHAINS = [
-  { name: 'Base', icon: '🔵', color: 'from-blue-500 to-blue-600' },
-  { name: 'Ethereum', icon: '⟠', color: 'from-slate-600 to-slate-700' },
-  { name: 'Arbitrum', icon: '🔷', color: 'from-blue-400 to-blue-500' },
-  { name: 'Optimism', icon: '🔴', color: 'from-red-500 to-red-600' },
-  { name: 'Polygon', icon: '💜', color: 'from-purple-500 to-purple-600' },
-  { name: 'BNB', icon: '💛', color: 'from-yellow-500 to-yellow-600' },
-  { name: 'Avalanche', icon: '🔺', color: 'from-red-500 to-red-600' },
-  { name: 'zkSync', icon: '⚡', color: 'from-violet-500 to-violet-600' },
-  { name: 'Monad', icon: '🟢', color: 'from-emerald-500 to-emerald-600' },
-  { name: 'Solana', icon: '☀️', color: 'from-purple-500 to-teal-500' },
+  { name: 'Base', color: '#0052FF', logo: 'https://raw.githubusercontent.com/base-org/brand-kit/main/logo/symbol/Base_Symbol_Blue.png' },
+  { name: 'Ethereum', color: '#627EEA', logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png' },
+  { name: 'Arbitrum', color: '#28A0F0', logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png' },
+  { name: 'Optimism', color: '#FF0420', logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/optimism/info/logo.png' },
+  { name: 'Polygon', color: '#8247E5', logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png' },
+  { name: 'BNB', color: '#F0B90B', logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/binance/info/logo.png' },
+  { name: 'Avalanche', color: '#E84142', logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/avalanchec/info/logo.png' },
+  { name: 'zkSync', color: '#8C8DFC', logo: 'https://zksync.io/favicon-32x32.png' },
+  { name: 'Solana', color: '#9945FF', logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/solana/info/logo.png' },
 ];
 
 export function Landing({ onConnect, isConnected, address, onNavigate }: LandingProps) {
@@ -209,9 +208,16 @@ export function Landing({ onConnect, isConnected, address, onNavigate }: Landing
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 0.5 + i * 0.05 }}
                   whileHover={{ scale: 1.1, y: -2 }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow cursor-default"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow cursor-default"
                 >
-                  <span className="text-base">{chain.icon}</span>
+                  <img 
+                    src={chain.logo} 
+                    alt={chain.name}
+                    className="w-5 h-5 rounded-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${chain.name}&size=20`;
+                    }}
+                  />
                   <span className="text-xs font-medium text-slate-600">{chain.name}</span>
                 </motion.div>
               ))}
