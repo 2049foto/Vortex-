@@ -9,10 +9,11 @@ import { useAccount } from 'wagmi';
 import { useRouter } from 'next/navigation';
 import { Dashboard } from '@/ui-components/dashboard';
 import { getUserHistory } from '@/lib/api';
+import { ClientOnly } from '@/components/client-only';
 
 export const dynamic = 'force-dynamic';
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const router = useRouter();
   const [history, setHistory] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -76,6 +77,14 @@ export default function DashboardPage() {
       error={error}
       onNavigate={(path) => router.push(path)}
     />
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <ClientOnly>
+      <DashboardPageContent />
+    </ClientOnly>
   );
 }
 

@@ -12,10 +12,11 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowUpRight, Clock, Search, ArrowRight, ExternalLink, Wallet } from 'lucide-react';
+import { ClientOnly } from '@/components/client-only';
 
 export const dynamic = 'force-dynamic';
 
-export default function HistoryPage() {
+function HistoryPageContent() {
   const router = useRouter();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -211,6 +212,14 @@ export default function HistoryPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+export default function HistoryPage() {
+  return (
+    <ClientOnly>
+      <HistoryPageContent />
+    </ClientOnly>
   );
 }
 

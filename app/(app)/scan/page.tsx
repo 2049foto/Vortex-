@@ -11,10 +11,11 @@ import { useRouter } from 'next/navigation';
 import { Scan } from '@/ui-components/scan';
 import { scanWallet } from '@/lib/api';
 import Turnstile from '@/components/ui/turnstile';
+import { ClientOnly } from '@/components/client-only';
 
 export const dynamic = 'force-dynamic';
 
-export default function ScanPage() {
+function ScanPageContent() {
   const { address, isConnected } = useAccount();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -83,5 +84,13 @@ export default function ScanPage() {
         />
       </div>
     </>
+  );
+}
+
+export default function ScanPage() {
+  return (
+    <ClientOnly>
+      <ScanPageContent />
+    </ClientOnly>
   );
 }
