@@ -34,32 +34,65 @@ export function OnchainKitCheckout({ productId, amount, onSuccess, onError }: Ch
   const handleCheckout = async () => {
     setIsProcessing(true);
     try {
-      // OnchainKit Checkout integration
-      // This is a placeholder - actual implementation depends on OnchainKit API
-      
-      // Example flow:
-      // 1. Create checkout session
-      // 2. User approves transaction
-      // 3. Process payment
-      // 4. Update subscription status in DB
-      
-      const response = await fetch('/api/v1/subscription/checkout', {
+      // Step 1: Create checkout session
+      const sessionResponse = await fetch('/api/v1/subscription/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'create',
           walletAddress: address,
           productId: productId || 'pro-monthly',
-          amount: amount || '9.99',
           chainId: base.id,
         }),
       });
 
-      const data = await response.json();
+      const sessionData = await sessionResponse.json();
       
-      if (data.success && data.txHash) {
-        onSuccess?.(data.txHash);
+      if (!sessionData.success) {
+        throw new Error(sessionData.error || 'Failed to create checkout session');
+      }
+
+      const { sessionId, amount, amountUsd } = sessionData.data;
+
+      // Step 2: User approves and sends transaction
+      // In production, this would use OnchainKit components or wallet SDK
+      // For now, we'll use a simple pattern where user sends ETH to a contract
+      
+      // This is a simplified flow - in production would use:
+      // - OnchainKit Checkout component
+      // - Or direct smart contract interaction
+      // - Or Coinbase Commerce integration
+
+      // For MVP, we'll show instructions or use a simple payment flow
+      // The actual transaction would be handled by the wallet
+      
+      // Step 3: After transaction is sent, process payment
+      // This would typically be done via webhook or polling
+      // For now, we'll simulate with a mock transaction hash
+      
+      // In production, wait for user to complete transaction
+      // Then call processPayment with the txHash
+      
+      // Mock flow for demonstration
+      const mockTxHash = '0x' + '0'.repeat(64); // Would be actual tx hash
+      
+      const processResponse = await fetch('/api/v1/subscription/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'process',
+          sessionId,
+          txHash: mockTxHash,
+          walletAddress: address,
+        }),
+      });
+
+      const processData = await processResponse.json();
+      
+      if (processData.success) {
+        onSuccess?.(mockTxHash);
       } else {
-        throw new Error(data.error || 'Checkout failed');
+        throw new Error(processData.error || 'Payment processing failed');
       }
     } catch (error) {
       onError?.(error instanceof Error ? error : new Error('Unknown error'));

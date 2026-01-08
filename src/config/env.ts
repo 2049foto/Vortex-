@@ -104,6 +104,11 @@ const envSchema = z.object({
   // WALLET CONNECTION
   // ============================================
   NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID: z.string().default('69915bbd15f146b792917c4f1a657139'),
+  
+  // ============================================
+  // SUBSCRIPTION & PAYMENTS
+  // ============================================
+  SUBSCRIPTION_CONTRACT_ADDRESS: z.string().optional(),
 });
 
 // Parse and validate environment variables

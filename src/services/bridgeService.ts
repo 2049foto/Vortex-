@@ -273,21 +273,88 @@ export async function executeBridge(
   toChainId: number,
   tokenAddress: string,
   amount: string,
-  recipient: string
+  recipient: string,
+  walletAddress: string,
+  privateKey?: string
 ): Promise<{ txHash: string; bridgeId: string }> {
   logger.info(
     { bridge: bridge.bridge, fromChainId, toChainId, amount },
     'Executing bridge'
   );
 
-  // In production, this would call the bridge's SDK or API to execute
-  // For now, return mock data
-  throw new Error('Bridge execution not yet implemented - requires bridge SDK integration');
+  if (!bridge.available) {
+    throw new Error(`Bridge ${bridge.bridge} is not available`);
+  }
 
-  // Example implementation:
-  // if (bridge.bridge === 'across') {
-  //   return await executeAcrossBridge(...);
-  // } else if (bridge.bridge === 'stargate') {
-  //   return await executeStargateBridge(...);
-  // }
+  try {
+    // Import bridge implementations dynamically
+    let result: { txHash: string; bridgeId: string };
+
+    switch (bridge.bridge) {
+      case 'across': {
+        const { executeAcrossBridge } = await import('../blockchain/bridges/across');
+        result = await executeAcrossBridge({
+          fromChainId,
+          toChainId,
+          tokenAddress,
+          amount,
+          recipient,
+          walletAddress,
+          privateKey,
+        });
+        break;
+      }
+
+      case 'stargate': {
+        const { executeStargateBridge } = await import('../blockchain/bridges/stargate');
+        result = await executeStargateBridge({
+          fromChainId,
+          toChainId,
+          tokenAddress,
+          amount,
+          recipient,
+          walletAddress,
+        });
+        break;
+      }
+
+      case 'debridge': {
+        const { executeDebridgeBridge } = await import('../blockchain/bridges/debridge');
+        result = await executeDebridgeBridge({
+          fromChainId,
+          toChainId,
+          tokenAddress,
+          amount,
+          recipient,
+          walletAddress,
+        });
+        break;
+      }
+
+      default:
+        throw new Error(`Unsupported bridge: ${bridge.bridge}`);
+    }
+
+    logger.info(
+      {
+        bridge: bridge.bridge,
+        txHash: result.txHash,
+        bridgeId: result.bridgeId,
+      },
+      'Bridge execution completed'
+    );
+
+    return result;
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        bridge: bridge.bridge,
+        fromChainId,
+        toChainId,
+      },
+      'Bridge execution failed'
+    );
+    throw error;
+  }
 }

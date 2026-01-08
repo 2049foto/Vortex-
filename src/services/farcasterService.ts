@@ -72,35 +72,102 @@ export interface NotificationPayload {
 // ============================================
 
 /**
- * Validate frame message signature
+ * Validate frame message signature with Farcaster Hub
  */
 export async function validateFrameMessage(
   message: FrameMessage
 ): Promise<FrameContext | null> {
   try {
-    // In production, verify signature with Farcaster Hub
-    // For MVP, we trust the untrusted data with basic validation
+    const { untrustedData, trustedData } = message;
     
-    const { untrustedData } = message;
-    
+    // Basic validation
     if (!untrustedData.fid || !untrustedData.buttonIndex) {
       logger.warn('Invalid frame message: missing fid or buttonIndex');
       return null;
     }
 
-    // TODO: Implement proper signature verification with Hub
-    // const response = await fetch(`${FARCASTER_HUB_URL}/v1/validateMessage`, {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/octet-stream' },
-    //   body: Buffer.from(message.trustedData?.messageBytes || '', 'hex'),
-    // });
+    // If we have trustedData, verify signature with Hub
+    let verified = false;
+    
+    if (trustedData?.messageBytes) {
+      try {
+        const hubUrl = env.NEXT_PUBLIC_FARCASTER_HUB_URL || FARCASTER_HUB_URL;
+        
+        // Convert hex string to buffer
+        const messageBuffer = Buffer.from(trustedData.messageBytes, 'hex');
+        
+        // Verify message with Farcaster Hub
+        const response = await fetch(`${hubUrl}/v1/validateMessage`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+          },
+          body: messageBuffer,
+          signal: AbortSignal.timeout(5000), // 5 second timeout
+        });
+
+        if (response.ok) {
+          const validationResult = await response.json();
+          
+          // Hub returns validation result
+          // Structure: { valid: boolean, message?: {...} }
+          verified = validationResult.valid === true;
+          
+          if (verified) {
+            logger.info(
+              { fid: untrustedData.fid },
+              'Frame message signature verified'
+            );
+          } else {
+            logger.warn(
+              { fid: untrustedData.fid, reason: validationResult.error },
+              'Frame message signature verification failed'
+            );
+          }
+        } else {
+          logger.warn(
+            {
+              fid: untrustedData.fid,
+              status: response.status,
+              statusText: response.statusText,
+            },
+            'Hub validation request failed'
+          );
+        }
+      } catch (error) {
+        // If Hub verification fails, log but don't block (fail-open for development)
+        logger.warn(
+          { error, fid: untrustedData.fid },
+          'Hub signature verification error (failing open)'
+        );
+        
+        // In development, allow unverified messages
+        // In production, you might want to fail closed
+        if (env.NODE_ENV === 'production') {
+          verified = false;
+        } else {
+          verified = true; // Fail-open for development
+        }
+      }
+    } else {
+      // No trustedData provided - cannot verify
+      logger.warn(
+        { fid: untrustedData.fid },
+        'No trustedData provided, cannot verify signature'
+      );
+      
+      // In development, allow unverified messages
+      if (env.NODE_ENV === 'production') {
+        return null; // Reject in production
+      }
+    }
     
     return {
       fid: untrustedData.fid,
       buttonIndex: untrustedData.buttonIndex,
       inputText: untrustedData.inputText,
       castId: untrustedData.castId,
-      verified: false, // Set to true when signature verification is implemented
+      verified,
     };
   } catch (error) {
     logger.error({ error }, 'Frame message validation failed');
