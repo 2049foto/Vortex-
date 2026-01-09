@@ -114,12 +114,13 @@ interface ConsolidateProps {
   address?: string;
   tokens?: Asset[];
   isExecuting?: boolean;
+  executionStep?: string;
   error?: string | null;
   onExecute?: (tokenAddresses?: string[]) => void;
   onNavigate?: (path: string) => void;
 }
 
-export function Consolidate({ address, tokens = [], isExecuting, error, onExecute, onNavigate }: ConsolidateProps) {
+export function Consolidate({ address, tokens = [], isExecuting, executionStep, error, onExecute, onNavigate }: ConsolidateProps) {
   const totalValue = tokens.reduce((sum, a) => sum + (a.valueUSD || 0), 0);
 
   // State
@@ -517,7 +518,7 @@ export function Consolidate({ address, tokens = [], isExecuting, error, onExecut
         {/* =============================================
             PHASE 3: EXECUTING
         ============================================= */}
-        {phase === 'executing' && (
+        {(phase === 'executing' || isExecuting) && (
           <motion.div
             key="executing"
             initial={{ opacity: 0, y: 20 }}
@@ -535,7 +536,7 @@ export function Consolidate({ address, tokens = [], isExecuting, error, onExecut
                 <Loader2 className="w-8 h-8 text-indigo-600" />
               </motion.div>
               <h2 className="text-2xl font-bold text-slate-900 mb-2">Executing Consolidation</h2>
-              <p className="text-slate-500">Please keep this window open</p>
+              <p className="text-slate-500">{executionStep || 'Please keep this window open'}</p>
             </div>
 
             {/* Steps */}

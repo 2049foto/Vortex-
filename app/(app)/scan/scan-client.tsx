@@ -1,15 +1,20 @@
 /**
  * Vortex Protocol - Scan Page Client Component
+ * Smart, secure, and user-friendly scanning experience
  */
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter } from 'next/navigation';
 import { Scan } from '@/ui-components/scan';
 import { scanWallet } from '@/lib/api';
 import Turnstile from '@/components/ui/turnstile';
+
+// All supported mainnet chains
+const SUPPORTED_CHAIN_IDS = [1, 8453, 42161, 10, 137, 56, 43114, 324];
+// Note: Monad (838592) excluded until providers support it
 
 export function ScanPageClient() {
   const { address, isConnected } = useAccount();
@@ -18,9 +23,12 @@ export function ScanPageClient() {
   const [scanResult, setScanResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReady, setTurnstileReady] = useState(false);
   const hasScanned = useRef(false);
+  const scanAttempts = useRef(0);
 
-  const handleScan = async (walletAddress?: string) => {
+  // Smart scan with retry logic
+  const handleScan = useCallback(async (walletAddress?: string) => {
     const targetAddress = walletAddress || address;
     
     if (!targetAddress) {
@@ -28,35 +36,71 @@ export function ScanPageClient() {
       return;
     }
 
+    // Check if we need Turnstile and it's not ready yet
+    const needsTurnstile = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    if (needsTurnstile && !turnstileToken && scanAttempts.current < 3) {
+      // Wait a bit for Turnstile to complete
+      scanAttempts.current++;
+      setTimeout(() => handleScan(targetAddress), 1000);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      // Scan ALL 10 EVM chains (all mainnet chains)
-      const allChainIds = [1, 8453, 42161, 10, 137, 56, 43114, 324, 838592];
-      const result = await scanWallet(targetAddress, allChainIds, turnstileToken);
+      const result = await scanWallet(targetAddress, SUPPORTED_CHAIN_IDS, turnstileToken);
       setScanResult(result.data);
       
-      console.log('Scan result:', {
+      // Log for debugging
+      console.log('Scan complete:', {
+        wallet: targetAddress,
         totalTokens: result.data?.tokens?.length || 0,
+        chains: SUPPORTED_CHAIN_IDS.length,
         summary: result.data?.summary,
-        tokens: result.data?.tokens,
       });
+
+      // Track successful scan
+      if (typeof window !== 'undefined' && (window as any).posthog) {
+        (window as any).posthog.capture('wallet_scanned', {
+          tokens_found: result.data?.tokens?.length || 0,
+          chains_scanned: SUPPORTED_CHAIN_IDS.length,
+        });
+      }
     } catch (err) {
       console.error('Scan error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to scan wallet');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to scan wallet';
+      setError(errorMessage);
+      
+      // Provide helpful error messages
+      if (errorMessage.includes('Bot verification')) {
+        setError('Please complete the security check and try again');
+      } else if (errorMessage.includes('rate limit')) {
+        setError('Too many requests. Please wait a moment and try again');
+      } else if (errorMessage.includes('network')) {
+        setError('Network error. Please check your connection and try again');
+      }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [address, turnstileToken]);
 
-  // Auto-scan on mount if connected
+  // Auto-scan when wallet connected and Turnstile ready (or not needed)
   useEffect(() => {
-    if (address && !hasScanned.current) {
+    const needsTurnstile = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    const canScan = address && !hasScanned.current && (!needsTurnstile || turnstileReady);
+    
+    if (canScan) {
       hasScanned.current = true;
       handleScan(address);
     }
-  }, [address]);
+  }, [address, turnstileReady, handleScan]);
+
+  // Handle Turnstile verification
+  const handleTurnstileVerify = useCallback((token: string) => {
+    setTurnstileToken(token);
+    setTurnstileReady(true);
+  }, []);
 
   // If not connected, show connect prompt
   if (!isConnected) {
@@ -64,7 +108,7 @@ export function ScanPageClient() {
       <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
         <div className="text-center">
           <h2 className="text-xl font-bold text-slate-900 mb-2">Connect Your Wallet</h2>
-          <p className="text-slate-500 mb-6">Connect your wallet to scan your portfolio</p>
+          <p className="text-slate-500 mb-6">Connect your wallet to scan your portfolio across {SUPPORTED_CHAIN_IDS.length} chains</p>
         </div>
       </div>
     );
@@ -81,13 +125,16 @@ export function ScanPageClient() {
         onNavigate={(path) => router.push(path)}
       />
 
-      {/* Turnstile widget (hidden, for bot protection) - Only render if siteKey exists */}
+      {/* Turnstile widget (hidden, for bot protection) */}
       {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
-        <div className="hidden">
+        <div className="fixed bottom-4 right-4 z-50">
           <Turnstile
             siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
-            onVerify={(token) => setTurnstileToken(token)}
-            onError={() => console.warn('Turnstile verification failed')}
+            onVerify={handleTurnstileVerify}
+            onError={() => {
+              console.warn('Turnstile verification failed');
+              setTurnstileReady(true); // Allow scan to proceed anyway
+            }}
           />
         </div>
       )}
