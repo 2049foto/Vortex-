@@ -1,6 +1,7 @@
 /**
  * Vortex Protocol - Coinbase Smart Wallet Integration
  * Fallback paymaster for Base
+ * Note: Free tier only works on testnet - mainnet requires billing
  */
 
 import { env } from '../config/env';
@@ -12,13 +13,24 @@ const logger = createLogger('coinbase');
 
 const CDP_PAYMASTER_URL = env.NEXT_PUBLIC_CDP_PAYMASTER_URL;
 
+// Coinbase CDP free tier only works on testnet
+// Mainnet requires billing: "No billing attached to account for mainnet sponsorship"
+const COINBASE_MAINNET_SPONSORSHIP_ENABLED = false;
+
 /**
  * Sponsor UserOperation with Coinbase Paymaster (Base only)
+ * Note: Free tier only supports testnet sponsorship
  */
 export async function sponsorUserOpWithCoinbase(
   userOp: Partial<UserOperation>,
   entryPoint: string = '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789'
 ): Promise<SponsorUserOpResponse> {
+  // Skip Coinbase paymaster on mainnet if billing not enabled
+  if (!COINBASE_MAINNET_SPONSORSHIP_ENABLED) {
+    logger.warn('Coinbase paymaster requires billing for mainnet - skipping');
+    throw new Error('Coinbase paymaster not available for mainnet (requires billing)');
+  }
+
   try {
     const response = await fetch(CDP_PAYMASTER_URL, {
       method: 'POST',
