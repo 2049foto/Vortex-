@@ -106,9 +106,10 @@ export async function GET(request: NextRequest) {
             }}
           >
             {[
-              { icon: '🔍', text: '11 Chains' },
+              { icon: '🔍', text: '10 Chains' },
               { icon: '🛡️', text: '20-Layer Risk' },
               { icon: '⚡', text: 'Gasless' },
+              { icon: '🏆', text: 'Earn XP' },
             ].map((feature, i) => (
               <div
                 key={i}

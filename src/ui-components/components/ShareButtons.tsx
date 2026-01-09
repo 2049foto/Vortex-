@@ -1,115 +1,237 @@
 /**
- * ShareButtons component for VORTEX PROTOCOL
- * Social sharing buttons for X (Twitter), Farcaster, and copy link
+ * Vortex Protocol - Viral Share Buttons
+ * Easy one-click sharing to Farcaster, Twitter, and more
  */
 
 'use client';
 
-import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Copy, Check } from 'lucide-react';
-import { cn } from '../utils/cn';
+import { Share2, Twitter, MessageCircle, Copy, Check, ExternalLink } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Button } from './ui/Button';
 
 interface ShareButtonsProps {
-  title?: string;
-  text?: string;
-  url?: string;
-  className?: string;
+  type: 'scan' | 'clean' | 'achievement' | 'leaderboard';
+  data: {
+    // Scan data
+    tokenCount?: number;
+    chainCount?: number;
+    dustValue?: number;
+    totalValue?: number;
+    
+    // Clean data
+    tokensCleaned?: number;
+    recovered?: number;
+    outputToken?: string;
+    gasSaved?: number;
+    txHash?: string;
+    
+    // Achievement data
+    title?: string;
+    xpEarned?: number;
+    level?: number;
+    
+    // Leaderboard data
+    rank?: number;
+    period?: string;
+  };
+  walletAddress?: string;
 }
 
-// Custom X (Twitter) icon
-function XIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-    </svg>
-  );
-}
-
-// Custom Farcaster icon
-function FarcasterIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M3 5.5v13A2.5 2.5 0 005.5 21h13a2.5 2.5 0 002.5-2.5v-13A2.5 2.5 0 0018.5 3h-13A2.5 2.5 0 003 5.5zm4.5 2h9v2h-9v-2zm0 4h9v2h-9v-2zm0 4h6v2h-6v-2z" />
-    </svg>
-  );
-}
-
-export function ShareButtons({
-  title = 'VORTEX PROTOCOL',
-  text = 'Just cleaned my portfolio with VORTEX!',
-  url = typeof window !== 'undefined' ? window.location.href : '',
-  className,
-}: ShareButtonsProps) {
+export function ShareButtons({ type, data, walletAddress }: ShareButtonsProps) {
   const [copied, setCopied] = useState(false);
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://dust-sweeper-yrjq.vercel.app';
 
-  const handleCopyLink = async () => {
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  // Generate share text based on type
+  const generateShareText = useCallback(() => {
+    switch (type) {
+      case 'scan':
+        return `🔍 Just scanned my wallet with @vortex
 
-  const handleShareX = () => {
-    const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
-    window.open(tweetUrl, '_blank', 'noopener,noreferrer');
-  };
+💰 ${data.tokenCount || 0} tokens across ${data.chainCount || 0} chains
+🧹 $${(data.dustValue || 0).toFixed(2)} dust detected
 
-  const handleShareFarcaster = () => {
-    const castUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text + ' ' + url)}`;
-    window.open(castUrl, '_blank', 'noopener,noreferrer');
-  };
+Scan yours 👇`;
+
+      case 'clean':
+        return `🧹 Just cleaned ${data.tokensCleaned || 0} dust tokens with @vortex!
+
+✨ Recovered: ${(data.recovered || 0).toFixed(4)} ${data.outputToken || 'ETH'}
+⛽ Gas saved: ${(data.gasSaved || 0).toFixed(4)} ETH
+
+Clean your wallet too 👇`;
+
+      case 'achievement':
+        return `🏆 Achievement Unlocked on @vortex!
+
+${data.title || 'New Badge'}
++${data.xpEarned || 0} XP
+
+Level ${data.level || 1} Dust Cleaner 🚀`;
+
+      case 'leaderboard':
+        return `🏆 I'm ranked #${data.rank || '?'} on the @vortex ${data.period || 'weekly'} leaderboard!
+
+Join the dust cleaning challenge 👇`;
+
+      default:
+        return `Check out @vortex - the best way to clean dust tokens! 🧹✨`;
+    }
+  }, [type, data]);
+
+  // Share URLs
+  const shareText = generateShareText();
+  const encodedText = encodeURIComponent(shareText);
+  const shareUrl = `${appUrl}/scan${walletAddress ? `?wallet=${walletAddress}` : ''}`;
+  const encodedUrl = encodeURIComponent(shareUrl);
+
+  const warpcastUrl = `https://warpcast.com/~/compose?text=${encodedText}&embeds[]=${encodedUrl}`;
+  const twitterUrl = `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`;
+  const telegramUrl = `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`;
+
+  // Copy to clipboard
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(`${shareText}\n\n${shareUrl}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
+  }, [shareText, shareUrl]);
 
   return (
-    <div className={cn('flex items-center gap-3', className)}>
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={handleShareX}
-        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-foreground text-background font-medium hover:opacity-90 transition-opacity min-h-[44px]"
-        aria-label="Share on X (Twitter)"
-      >
-        <XIcon className="w-4 h-4" />
-        <span>Share</span>
-      </motion.button>
+    <div className="flex flex-col gap-3">
+      {/* Main Share Buttons */}
+      <div className="flex gap-2">
+        {/* Warpcast (Farcaster) - Primary */}
+        <motion.a
+          href={warpcastUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-semibold transition-colors"
+        >
+          <MessageCircle className="w-5 h-5" />
+          <span>Share on Warpcast</span>
+        </motion.a>
 
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={handleShareFarcaster}
-        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 text-white font-medium hover:bg-purple-700 transition-colors min-h-[44px]"
-        aria-label="Share on Farcaster"
-      >
-        <FarcasterIcon className="w-4 h-4" />
-        <span>Cast</span>
-      </motion.button>
+        {/* Twitter */}
+        <motion.a
+          href={twitterUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="flex items-center justify-center gap-2 h-12 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold transition-colors"
+        >
+          <Twitter className="w-5 h-5" />
+          <span className="hidden sm:inline">Twitter</span>
+        </motion.a>
+      </div>
 
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={handleCopyLink}
-        className={cn(
-          'flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-medium min-h-[44px] transition-all',
-          copied
-            ? 'bg-accent/10 border-accent text-accent'
-            : 'bg-card border-border text-foreground hover:border-muted-foreground'
+      {/* Secondary Actions */}
+      <div className="flex gap-2">
+        {/* Copy Link */}
+        <Button
+          variant="outline"
+          onClick={handleCopy}
+          className="flex-1 h-10"
+        >
+          {copied ? (
+            <>
+              <Check className="w-4 h-4 mr-2 text-green-500" />
+              Copied!
+            </>
+          ) : (
+            <>
+              <Copy className="w-4 h-4 mr-2" />
+              Copy Link
+            </>
+          )}
+        </Button>
+
+        {/* Telegram */}
+        <a
+          href={telegramUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium transition-colors"
+        >
+          <Share2 className="w-4 h-4" />
+          <span className="hidden sm:inline">Telegram</span>
+        </a>
+
+        {/* View Transaction (if available) */}
+        {data.txHash && (
+          <a
+            href={`https://basescan.org/tx/${data.txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium transition-colors"
+          >
+            <ExternalLink className="w-4 h-4" />
+            <span className="hidden sm:inline">View TX</span>
+          </a>
         )}
-        aria-label={copied ? 'Link copied' : 'Copy link'}
-      >
-        {copied ? (
-          <>
-            <Check className="w-4 h-4" />
-            <span>Copied!</span>
-          </>
-        ) : (
-          <>
-            <Copy className="w-4 h-4" />
-            <span>Copy</span>
-          </>
-        )}
-      </motion.button>
+      </div>
     </div>
   );
 }
 
-export default ShareButtons;
+/**
+ * Quick Share Button (compact version for inline use)
+ */
+export function QuickShareButton({ 
+  text, 
+  url,
+  className = '' 
+}: { 
+  text: string; 
+  url: string;
+  className?: string;
+}) {
+  const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(url)}`;
 
+  return (
+    <motion.a
+      href={warpcastUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-100 hover:bg-violet-200 text-violet-700 text-sm font-medium transition-colors ${className}`}
+    >
+      <Share2 className="w-3.5 h-3.5" />
+      Share
+    </motion.a>
+  );
+}
+
+/**
+ * Farcaster Cast Button (creates a cast with frame embed)
+ */
+export function CastFrameButton({
+  frameUrl,
+  text = 'Check this out!',
+}: {
+  frameUrl: string;
+  text?: string;
+}) {
+  const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(frameUrl)}`;
+
+  return (
+    <motion.a
+      href={warpcastUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-semibold shadow-lg shadow-violet-500/25 transition-all"
+    >
+      <MessageCircle className="w-5 h-5" />
+      Cast to Farcaster
+    </motion.a>
+  );
+}
