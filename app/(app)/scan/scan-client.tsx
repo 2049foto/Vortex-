@@ -63,34 +63,49 @@ const TIERS = {
   RISK: { label: 'Risk', color: 'danger', minValue: 0 },
 };
 
-// Mock data generator for demo
-function generateMockTokens(count: number): Token[] {
-  const symbols = ['ETH', 'USDC', 'USDT', 'DAI', 'WETH', 'ARB', 'OP', 'MATIC', 'LINK', 'UNI', 'AAVE', 'CRV', 'SUSHI', 'COMP', 'MKR', 'SNX', 'YFI', 'BAL', 'LDO', 'RPL'];
-  const chainIds = [8453, 1, 42161, 10, 137, 56, 43114, 324];
-  
-  return Array.from({ length: count }, (_, i) => {
-    const chainId = chainIds[Math.floor(Math.random() * chainIds.length)];
-    const balanceUsd = Math.random() > 0.7 ? Math.random() * 500 : Math.random() * 10;
-    const riskScore = Math.floor(Math.random() * 100);
-    
-    let tier: Token['tier'] = 'LEGIT';
-    if (riskScore > 70) tier = 'RISK';
-    else if (balanceUsd < 1) tier = 'MICRODUST';
-    else if (balanceUsd < 10) tier = 'DUST';
-    
+// Real API scan function
+async function scanWalletViaAPI(walletAddress: string): Promise<{ tokens: Token[], summary: any }> {
+  try {
+    const response = await fetch('/api/v1/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        walletAddress,
+        chainIds: [8453, 1, 42161, 10, 137, 56, 43114, 324, 838592], // All EVM chains
+        includeSolana: false,
+        turnstileToken: 'skip-for-now', // Will be replaced with real Turnstile
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Scan failed');
+    }
+
+    // Transform API response to local Token format
+    const tokens: Token[] = (data.data?.tokens || []).map((t: any, i: number) => ({
+      id: `${t.chainId}-${t.address}`,
+      symbol: t.symbol || 'UNKNOWN',
+      name: t.name || 'Unknown Token',
+      address: t.address,
+      chainId: t.chainId,
+      chainName: CHAINS[t.chainId]?.name || 'Unknown',
+      balance: t.balanceFormatted || t.balance || '0',
+      balanceUsd: t.valueUsd || 0,
+      logo: t.logoUrl,
+      tier: t.tier || 'DUST',
+      riskScore: t.riskScore || 0,
+    }));
+
     return {
-      id: `token-${i}`,
-      symbol: symbols[i % symbols.length],
-      name: `${symbols[i % symbols.length]} Token`,
-      address: `0x${Math.random().toString(16).slice(2, 42)}`,
-      chainId,
-      chainName: CHAINS[chainId]?.name || 'Unknown',
-      balance: (Math.random() * 1000).toFixed(4),
-      balanceUsd,
-      tier,
-      riskScore,
+      tokens,
+      summary: data.data?.summary || {},
     };
-  });
+  } catch (error) {
+    console.error('Scan API error:', error);
+    throw error;
+  }
 }
 
 export default function ScanClient() {
@@ -115,7 +130,7 @@ export default function ScanClient() {
     }
   }, [addressParam]);
 
-  // Scan handler - optimized with parallel chain scanning
+  // Scan handler - calls real API with progress simulation
   const handleScan = useCallback(async (address?: string) => {
     const addr = address || walletAddress;
     if (!addr) return;
@@ -125,31 +140,49 @@ export default function ScanClient() {
     setSelectedTokens(new Set());
     setScanResult(null);
     
-    // Simulate progressive scan (in production, use real API with streaming)
     const startTime = Date.now();
     const totalChains = Object.keys(CHAINS).length;
     
-    for (let i = 0; i <= 100; i += 5) {
-      await new Promise(r => setTimeout(r, 50));
-      setScanProgress(i);
+    // Start progress animation
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+      progress = Math.min(progress + Math.random() * 15, 90);
+      setScanProgress(Math.floor(progress));
+    }, 200);
+
+    try {
+      // Call real scan API
+      const { tokens, summary } = await scanWalletViaAPI(addr);
+      
+      // Complete progress
+      clearInterval(progressInterval);
+      setScanProgress(100);
+      
+      // Calculate dust value
+      const dustTokens = tokens.filter(t => t.tier === 'DUST' || t.tier === 'MICRODUST');
+      const totalValue = tokens.reduce((sum, t) => sum + t.balanceUsd, 0);
+      const dustValue = dustTokens.reduce((sum, t) => sum + t.balanceUsd, 0);
+      
+      setScanResult({
+        wallet: addr,
+        totalValue,
+        dustValue,
+        tokens,
+        chainsScanned: totalChains,
+        scanTime: Date.now() - startTime,
+      });
+      
+      // Auto-select dust tokens
+      setSelectedTokens(new Set(dustTokens.map(t => t.id)));
+      
+    } catch (error) {
+      clearInterval(progressInterval);
+      setScanProgress(0);
+      console.error('Scan failed:', error);
+      alert('Scan failed. Please try again.');
+    } finally {
+      setIsScanning(false);
     }
-    
-    // Generate mock result
-    const tokens = generateMockTokens(15);
-    const dustTokens = tokens.filter(t => t.tier !== 'LEGIT' && t.tier !== 'RISK');
-    
-    setScanResult({
-      wallet: addr,
-      totalValue: tokens.reduce((sum, t) => sum + t.balanceUsd, 0),
-      dustValue: dustTokens.reduce((sum, t) => sum + t.balanceUsd, 0),
-      tokens,
-      chainsScanned: totalChains,
-      scanTime: Date.now() - startTime,
-    });
-    
-    // Auto-select dust tokens
-    setSelectedTokens(new Set(dustTokens.map(t => t.id)));
-    setIsScanning(false);
   }, [walletAddress]);
 
   // Filter tokens
