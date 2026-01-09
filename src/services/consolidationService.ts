@@ -259,6 +259,7 @@ export async function createConsolidationPlan(
 /**
  * Find best swap route across multiple routers (1inch, 0x, Curve, Balancer)
  * Uses real APIs for mainnet production
+ * Returns full tx data for client-side execution
  */
 async function findBestRoute(
   fromToken: TokenHolding,
@@ -273,59 +274,45 @@ async function findBestRoute(
     'Finding best route across all DEXes'
   );
 
-  // Get quotes from all routers in parallel
-  const quotePromises = [
+  // Get swap tx data from all routers in parallel (not just quotes)
+  const swapPromises = [
     // 1inch - Primary aggregator
-    oneInch.getQuote({
+    oneInch.getSwapTx({
       chainId,
       fromToken: fromToken.address,
       toToken,
       amount: amountIn,
       fromAddress: walletAddress,
+      slippage: 0.5,
     }).catch(e => ({ error: e, router: '1inch' })),
     
     // 0x/Uniswap - Secondary aggregator
-    uniswapV4.getQuote({
+    uniswapV4.getSwapTx({
       chainId,
       fromToken: fromToken.address,
       toToken,
       amount: amountIn,
       fromAddress: walletAddress,
+      slippage: 0.5,
     }).catch(e => ({ error: e, router: 'uniswap_v4' })),
-    
-    // Curve - Stablecoin specialist
-    curve.getQuote({
-      chainId,
-      fromToken: fromToken.address,
-      toToken,
-      amount: amountIn,
-    }).catch(e => ({ error: e, router: 'curve' })),
-    
-    // Balancer - Multi-token pools
-    balancer.getQuote({
-      chainId,
-      fromToken: fromToken.address,
-      toToken,
-      amount: amountIn,
-    }).catch(e => ({ error: e, router: 'balancer' })),
   ];
 
-  const quotes = await Promise.all(quotePromises);
+  const results = await Promise.all(swapPromises);
 
-  // Find best quote (highest net output after gas)
-  let bestQuote: SwapRoute | null = null;
+  // Find best route (highest output after considering gas)
+  let bestRoute: SwapRoute | null = null;
   let bestNetOutput = 0;
 
-  quotes.forEach((result: any) => {
+  for (const result of results) {
     // Skip failed quotes
-    if (result.error) {
-      logger.debug({ router: result.router, error: result.error?.message }, 'Quote failed');
-      return;
+    if ('error' in result && result.error) {
+      logger.debug({ router: (result as any).router, error: (result as any).error?.message }, 'Swap tx failed');
+      continue;
     }
 
-    const quote = result;
-    const outputValue = parseFloat(quote.amountOut || '0');
-    const gasValue = parseFloat(quote.estimatedGas || '0');
+    const swap = result as any;
+    const outputValue = parseFloat(swap.amountOut || '0');
+    const gasValue = parseFloat(swap.estimatedGas || '0');
     
     // Calculate net output (output - estimated gas cost in USD)
     // Assume ~$0.01 per 1000 gas on Base
@@ -333,40 +320,50 @@ async function findBestRoute(
     const netOutput = outputValue - gasCostUsd;
 
     logger.debug({
-      router: quote.router,
-      amountOut: quote.amountOut,
-      estimatedGas: quote.estimatedGas,
+      router: swap.router,
+      amountOut: swap.amountOut,
+      estimatedGas: swap.estimatedGas,
+      hasTx: !!(swap.tx || swap.calldata),
       netOutput: netOutput.toFixed(8),
-    }, 'Router quote received');
+    }, 'Router swap data received');
 
-    if (netOutput > bestNetOutput) {
+    if (netOutput > bestNetOutput && (swap.tx || swap.calldata)) {
       bestNetOutput = netOutput;
-      bestQuote = {
-        router: quote.router,
+      bestRoute = {
+        router: swap.router,
         fromToken,
         toToken,
         amountIn,
-        expectedOut: quote.amountOut,
-        estimatedGas: quote.estimatedGas,
-        priceImpact: quote.priceImpact || 0,
+        expectedOut: swap.amountOut,
+        estimatedGas: swap.estimatedGas,
+        priceImpact: swap.priceImpact || 0,
+        tx: swap.tx ? {
+          to: swap.tx.to,
+          data: swap.tx.data,
+          value: swap.tx.value || '0',
+        } : swap.calldata ? {
+          to: swap.to,
+          data: swap.calldata,
+          value: swap.value || '0',
+        } : undefined,
       };
     }
-  });
+  }
 
-  if (bestQuote !== null) {
-    const route = bestQuote as SwapRoute;
+  if (bestRoute !== null) {
     logger.info({
-      router: route.router,
+      router: bestRoute.router,
       fromToken: fromToken.symbol,
       toToken,
-      expectedOut: route.expectedOut,
-      priceImpact: route.priceImpact,
-    }, 'Best route selected');
+      expectedOut: bestRoute.expectedOut,
+      priceImpact: bestRoute.priceImpact,
+      hasTx: !!bestRoute.tx,
+    }, 'Best route selected with tx data');
   } else {
     logger.warn({ fromToken: fromToken.address, toToken }, 'No valid route found');
   }
 
-  return bestQuote;
+  return bestRoute;
 }
 
 /**

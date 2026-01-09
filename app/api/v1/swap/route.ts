@@ -122,13 +122,19 @@ export async function POST(request: NextRequest) {
         }))
       });
 
-      // If dry run, return plan without execution
+      // If dry run, return plan with full tx data for client execution
       if (dryRun) {
+        log('info', 'Returning dry run plan with tx data', {
+          swapCount: plan.swaps.length,
+          swapsWithTx: plan.swaps.filter(s => s.tx).length,
+        });
+        
         return NextResponse.json({
           success: true,
           data: {
             requestId: plan.id,
-            status: 'simulated',
+            status: 'ready',
+            requiresClientExecution: true, // Always client execution for security
             plan: {
               swapCount: plan.swaps.length,
               estimatedOutput: plan.estimatedOutput,
@@ -145,11 +151,17 @@ export async function POST(request: NextRequest) {
               swaps: plan.swaps.map((s) => ({
                 router: s.router,
                 fromToken: s.fromToken.symbol,
+                fromTokenAddress: s.fromToken.address,
+                fromChainId: s.fromToken.chainId,
                 toToken: outputToken || 'ETH',
                 expectedOut: s.expectedOut,
                 priceImpact: s.priceImpact,
-                // Include Relay tx data for client-side execution
-                tx: s.tx,
+                // CRITICAL: Include full tx data for client-side execution
+                tx: s.tx ? {
+                  to: s.tx.to,
+                  data: s.tx.data,
+                  value: s.tx.value || '0',
+                } : null,
               })),
             },
           },
@@ -172,68 +184,40 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      // Step 4: For Relay bridges, return plan for client-side execution
-      const hasRelayBridges = plan.swaps.some(s => s.router === 'relay');
-      
-      if (hasRelayBridges) {
-        // Return plan with Relay tx data - client will execute
-        return NextResponse.json({
-          success: true,
-          data: {
-            requestId: plan.id,
-            status: 'pending_client_execution',
-            requiresClientExecution: true,
-            plan: {
-              swapCount: plan.swaps.length,
-              estimatedOutput: plan.estimatedOutput,
-              estimatedGasSaved: plan.estimatedGasSaved,
-              swaps: plan.swaps.map((s) => ({
-                router: s.router,
-                fromToken: s.fromToken.symbol,
-                fromTokenAddress: s.fromToken.address,
-                fromChainId: s.fromToken.chainId,
-                toToken: outputToken || 'ETH',
-                expectedOut: s.expectedOut,
-                priceImpact: s.priceImpact,
-                tx: s.tx, // Relay tx data for client execution
-              })),
-            },
-            message: 'Cross-chain swap requires wallet signature. Please approve transactions.',
-          },
-        });
-      }
-
-      // Step 5: Execute same-chain swaps server-side
-      const result = await executeConsolidation(plan.id, walletAddress, plan);
-
-      // Step 5: Send notification on completion
-      if (result.status === 'success') {
-        try {
-          // Get consolidation request to get txHash
-          const { getConsolidationStatus } = await import('@/services/consolidationService');
-          const consolidation = await getConsolidationStatus(result.requestId);
-          
-          const outputValue = parseFloat(plan.estimatedOutput || '0');
-          const gasSaved = parseFloat(plan.estimatedGasSaved || '0');
-          const txHash = consolidation?.txHash || '';
-          
-          await notifyConsolidationComplete(walletAddress, outputValue, gasSaved, txHash);
-        } catch (notifError) {
-          // Don't fail if notification fails
-          console.warn('Failed to send completion notification:', notifError);
-        }
-      }
+      // For non-dryRun, still return plan for client execution
+      // All transactions must be signed by user wallet (non-custodial)
+      log('info', 'Returning execution plan for client-side signing', {
+        swapCount: plan.swaps.length,
+        swapsWithTx: plan.swaps.filter(s => s.tx).length,
+      });
 
       return NextResponse.json({
         success: true,
         data: {
-          requestId: result.requestId,
-          status: result.status,
+          requestId: plan.id,
+          status: 'ready',
+          requiresClientExecution: true,
           plan: {
             swapCount: plan.swaps.length,
             estimatedOutput: plan.estimatedOutput,
             estimatedGasSaved: plan.estimatedGasSaved,
+            estimatedTime: plan.estimatedTime,
+            swaps: plan.swaps.map((s) => ({
+              router: s.router,
+              fromToken: s.fromToken.symbol,
+              fromTokenAddress: s.fromToken.address,
+              fromChainId: s.fromToken.chainId,
+              toToken: outputToken || 'ETH',
+              expectedOut: s.expectedOut,
+              priceImpact: s.priceImpact,
+              tx: s.tx ? {
+                to: s.tx.to,
+                data: s.tx.data,
+                value: s.tx.value || '0',
+              } : null,
+            })),
           },
+          message: 'Please approve transactions in your wallet',
         },
       });
     } catch (serviceError) {

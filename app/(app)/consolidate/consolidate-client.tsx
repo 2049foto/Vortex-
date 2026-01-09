@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId, useSwitchChain, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowRight, 
@@ -14,8 +14,10 @@ import {
   Info,
   ArrowLeft,
   Zap,
-  Shield
+  Shield,
+  ExternalLink
 } from 'lucide-react';
+import { parseEther, formatEther } from 'viem';
 
 interface SelectedToken {
   id: string;
@@ -36,6 +38,21 @@ interface ConsolidationData {
   totalValue?: number;
 }
 
+interface SwapTx {
+  router: string;
+  fromToken: string;
+  fromTokenAddress: string;
+  fromChainId: number;
+  toToken: string;
+  expectedOut: string;
+  priceImpact: number;
+  tx?: {
+    to: string;
+    data: string;
+    value: string;
+  };
+}
+
 const OUTPUT_OPTIONS = [
   { symbol: 'ETH', name: 'Ethereum', icon: '⟠' },
   { symbol: 'USDC', name: 'USD Coin', icon: '💵' },
@@ -43,11 +60,30 @@ const OUTPUT_OPTIONS = [
 
 const SLIPPAGE_OPTIONS = [0.5, 1.0, 2.0];
 
+const CHAIN_NAMES: Record<number, string> = {
+  1: 'Ethereum',
+  8453: 'Base',
+  42161: 'Arbitrum',
+  10: 'Optimism',
+  137: 'Polygon',
+  56: 'BNB Chain',
+  43114: 'Avalanche',
+  324: 'zkSync',
+};
+
 type Step = 'review' | 'configure' | 'confirm' | 'processing' | 'success' | 'error';
 
 export default function ConsolidateClient() {
   const router = useRouter();
   const { address, isConnected } = useAccount();
+  const currentChainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  
+  // Transaction hooks
+  const { sendTransaction, isPending: isSending, data: txHash } = useSendTransaction();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
   
   // State
   const [step, setStep] = useState<Step>('review');
@@ -57,6 +93,10 @@ export default function ConsolidateClient() {
   const [showSettings, setShowSettings] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [currentTxIndex, setCurrentTxIndex] = useState(0);
+  const [pendingSwaps, setPendingSwaps] = useState<SwapTx[]>([]);
+  const [executedTxHashes, setExecutedTxHashes] = useState<string[]>([]);
+  const [statusMessage, setStatusMessage] = useState('');
 
   // Load selected tokens from session
   useEffect(() => {
@@ -91,6 +131,79 @@ export default function ConsolidateClient() {
     return totals.value - fee - slippageCost;
   }, [totals.value, slippage]);
 
+  // Handle transaction confirmation
+  useEffect(() => {
+    if (isConfirmed && txHash) {
+      console.log('[CONSOLIDATE] Transaction confirmed:', txHash);
+      setExecutedTxHashes(prev => [...prev, txHash]);
+      
+      // Move to next swap
+      if (currentTxIndex < pendingSwaps.length - 1) {
+        setCurrentTxIndex(prev => prev + 1);
+        setProgress(Math.round(((currentTxIndex + 1) / pendingSwaps.length) * 100));
+      } else {
+        // All done
+        setProgress(100);
+        setStep('success');
+        sessionStorage.removeItem('vortex_consolidation');
+      }
+    }
+  }, [isConfirmed, txHash, currentTxIndex, pendingSwaps.length]);
+
+  // Execute next pending swap when index changes
+  useEffect(() => {
+    if (step === 'processing' && pendingSwaps.length > 0 && currentTxIndex < pendingSwaps.length) {
+      executeNextSwap();
+    }
+  }, [currentTxIndex, pendingSwaps, step]);
+
+  // Execute a single swap transaction
+  const executeNextSwap = useCallback(async () => {
+    const swap = pendingSwaps[currentTxIndex];
+    if (!swap || !swap.tx) {
+      console.error('[CONSOLIDATE] No transaction data for swap:', swap);
+      setError(`No transaction data for ${swap?.fromToken || 'token'}`);
+      setStep('error');
+      return;
+    }
+
+    console.log('[CONSOLIDATE] Executing swap', currentTxIndex + 1, 'of', pendingSwaps.length, swap);
+    setStatusMessage(`Swapping ${swap.fromToken} (${CHAIN_NAMES[swap.fromChainId] || 'Chain ' + swap.fromChainId})...`);
+
+    try {
+      // Check if we need to switch chains
+      if (swap.fromChainId !== currentChainId) {
+        console.log('[CONSOLIDATE] Switching to chain', swap.fromChainId);
+        setStatusMessage(`Switching to ${CHAIN_NAMES[swap.fromChainId] || 'Chain ' + swap.fromChainId}...`);
+        
+        try {
+          await switchChain({ chainId: swap.fromChainId });
+          // Wait for chain switch
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } catch (switchError) {
+          console.error('[CONSOLIDATE] Chain switch failed:', switchError);
+          setError(`Please switch to ${CHAIN_NAMES[swap.fromChainId] || 'Chain ' + swap.fromChainId} manually`);
+          setStep('error');
+          return;
+        }
+      }
+
+      // Send the transaction
+      setStatusMessage(`Confirm transaction in your wallet...`);
+      
+      sendTransaction({
+        to: swap.tx.to as `0x${string}`,
+        data: swap.tx.data as `0x${string}`,
+        value: BigInt(swap.tx.value || '0'),
+      });
+
+    } catch (err) {
+      console.error('[CONSOLIDATE] Swap execution error:', err);
+      setError(err instanceof Error ? err.message : 'Transaction failed');
+      setStep('error');
+    }
+  }, [pendingSwaps, currentTxIndex, currentChainId, switchChain, sendTransaction]);
+
   // Handle consolidation
   const handleConsolidate = async () => {
     if (!data || !isConnected || !address) return;
@@ -98,10 +211,14 @@ export default function ConsolidateClient() {
     setStep('processing');
     setProgress(0);
     setError(null);
+    setCurrentTxIndex(0);
+    setPendingSwaps([]);
+    setExecutedTxHashes([]);
+    setStatusMessage('Creating consolidation plan...');
 
     try {
-      // Step 1: Get consolidation plan (dry run)
-      setProgress(10);
+      // Step 1: Get consolidation plan (dry run to get tx data)
+      setProgress(5);
       
       const planResponse = await fetch('/api/v1/swap', {
         method: 'POST',
@@ -119,9 +236,9 @@ export default function ConsolidateClient() {
       });
 
       const planData = await planResponse.json();
+      console.log('[CONSOLIDATE] Plan response:', planData);
       
       if (!planData.success) {
-        // Show specific error message
         const errorMsg = planData.message || planData.error || 'Failed to create consolidation plan';
         const skippedTokens = planData.data?.skippedTokens;
         
@@ -132,55 +249,36 @@ export default function ConsolidateClient() {
         throw new Error(errorMsg);
       }
 
-      setProgress(30);
+      setProgress(15);
+      setStatusMessage('Analyzing swap routes...');
 
-      // Step 2: Check if client-side execution is needed (cross-chain)
-      if (planData.data?.requiresClientExecution) {
-        // Cross-chain swaps need wallet signature
-        // For now, show info message
-        setProgress(50);
-        
-        // In production: Execute each swap tx with wallet
-        // For MVP: Show success with plan details
-        await new Promise(r => setTimeout(r, 1500));
-        setProgress(100);
-        
-        setStep('success');
-        sessionStorage.removeItem('vortex_consolidation');
-        return;
+      // Step 2: Extract swaps with transaction data
+      const swaps: SwapTx[] = planData.data?.plan?.swaps || [];
+      
+      if (swaps.length === 0) {
+        throw new Error('No viable swap routes found. All tokens may require bridging or have insufficient liquidity.');
       }
 
-      // Step 3: Execute consolidation (same-chain, server-side)
-      setProgress(50);
+      // Filter swaps that have transaction data
+      const executableSwaps = swaps.filter((s: SwapTx) => s.tx && s.tx.to && s.tx.data);
       
-      const execResponse = await fetch('/api/v1/swap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          walletAddress: address,
-          selectedTokens: data.tokens.map(t => ({
-            chainId: t.chainId,
-            address: t.address || t.id?.split('-')[1],
-          })),
-          outputToken: outputToken,
-          slippagePct: slippage,
-          dryRun: false,
-        }),
-      });
-
-      const execData = await execResponse.json();
-      
-      if (!execData.success) {
-        throw new Error(execData.error || execData.message || 'Consolidation execution failed');
+      if (executableSwaps.length === 0) {
+        // No executable swaps - might be server-side only or missing tx data
+        throw new Error('No transactions available for client execution. Please try again.');
       }
 
-      setProgress(100);
+      console.log('[CONSOLIDATE] Executable swaps:', executableSwaps.length);
+      setProgress(20);
+      setStatusMessage(`Found ${executableSwaps.length} swap${executableSwaps.length > 1 ? 's' : ''} to execute`);
+
+      // Store pending swaps and start execution
+      setPendingSwaps(executableSwaps);
       
-      setStep('success');
-      sessionStorage.removeItem('vortex_consolidation');
+      // Wait a moment for state to update, then first swap will execute via useEffect
+      await new Promise(r => setTimeout(r, 500));
       
     } catch (err: any) {
-      console.error('Consolidation error:', err);
+      console.error('[CONSOLIDATE] Error:', err);
       setError(err?.message || 'Consolidation failed. Please try again.');
       setStep('error');
     }
@@ -215,22 +313,42 @@ export default function ConsolidateClient() {
             
             <h1 className="text-2xl font-bold mb-2">Consolidation Complete!</h1>
             <p className="mb-6" style={{ color: 'hsl(var(--text-secondary))' }}>
-              {totals.tokens} tokens consolidated to {outputToken}
+              {totals.tokens} tokens consolidated to {outputToken} on Base
             </p>
             
             <div className="card mb-6" style={{ maxWidth: 320, margin: '0 auto' }}>
               <div className="text-center">
                 <p className="text-sm mb-1" style={{ color: 'hsl(var(--text-tertiary))' }}>
-                  You received
+                  Estimated received
                 </p>
                 <p className="text-3xl font-bold" style={{ color: 'hsl(var(--success))' }}>
                   ${estimatedOutput.toFixed(2)}
                 </p>
                 <p className="text-sm" style={{ color: 'hsl(var(--text-tertiary))' }}>
-                  in {outputToken}
+                  in {outputToken} on Base
                 </p>
               </div>
             </div>
+
+            {/* Transaction links */}
+            {executedTxHashes.length > 0 && (
+              <div className="mb-6 text-left max-w-xs mx-auto">
+                <p className="text-sm font-medium mb-2">Transactions:</p>
+                {executedTxHashes.map((hash, i) => (
+                  <a
+                    key={hash}
+                    href={`https://basescan.org/tx/${hash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm hover:underline mb-1"
+                    style={{ color: 'hsl(var(--accent))' }}
+                  >
+                    <span>Tx {i + 1}: {hash.slice(0, 10)}...{hash.slice(-8)}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ))}
+              </div>
+            )}
             
             <div className="flex gap-3 justify-center">
               <button 
@@ -277,10 +395,18 @@ export default function ConsolidateClient() {
               </div>
             </div>
             
-            <h2 className="text-xl font-semibold mb-2">Processing</h2>
+            <h2 className="text-xl font-semibold mb-2">
+              {isSending ? 'Confirm in Wallet' : isConfirming ? 'Confirming...' : 'Processing'}
+            </h2>
             <p style={{ color: 'hsl(var(--text-secondary))' }}>
-              Consolidating {totals.tokens} tokens...
+              {statusMessage || `Consolidating ${totals.tokens} tokens...`}
             </p>
+
+            {pendingSwaps.length > 1 && (
+              <p className="text-sm mt-2" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                Transaction {Math.min(currentTxIndex + 1, pendingSwaps.length)} of {pendingSwaps.length}
+              </p>
+            )}
             
             <div className="progress-bar mt-6 max-w-xs mx-auto">
               <motion.div 
@@ -316,7 +442,7 @@ export default function ConsolidateClient() {
             </div>
             
             <h1 className="text-2xl font-bold mb-2">Consolidation Failed</h1>
-            <p className="mb-6" style={{ color: 'hsl(var(--text-secondary))' }}>
+            <p className="mb-6 px-4" style={{ color: 'hsl(var(--text-secondary))', maxWidth: '400px', margin: '0 auto 24px' }}>
               {error || 'Something went wrong. Please try again.'}
             </p>
             
@@ -329,7 +455,10 @@ export default function ConsolidateClient() {
               </button>
               <button 
                 className="btn btn-primary"
-                onClick={() => setStep('review')}
+                onClick={() => {
+                  setError(null);
+                  setStep('review');
+                }}
               >
                 Try Again
               </button>
@@ -408,7 +537,7 @@ export default function ConsolidateClient() {
           <div className="text-center py-4">
             <p className="text-3xl font-bold mb-1">${totals.value.toFixed(2)}</p>
             <p className="text-sm" style={{ color: 'hsl(var(--text-tertiary))' }}>
-              from {totals.chains} chains
+              from {totals.chains} chain{totals.chains > 1 ? 's' : ''}
             </p>
           </div>
           
@@ -424,7 +553,7 @@ export default function ConsolidateClient() {
           {/* Output Token Selector */}
           <div>
             <p className="text-xs mb-2" style={{ color: 'hsl(var(--text-tertiary))' }}>
-              Receive as
+              Receive as (on Base)
             </p>
             <div className="flex gap-2">
               {OUTPUT_OPTIONS.map(opt => (
@@ -464,7 +593,7 @@ export default function ConsolidateClient() {
             <span className="summary-value">-${(totals.value * 0.008).toFixed(2)}</span>
           </div>
           <div className="summary-row">
-            <span className="summary-label">Slippage ({slippage}%)</span>
+            <span className="summary-label">Max Slippage ({slippage}%)</span>
             <span className="summary-value">-${(totals.value * slippage / 100).toFixed(2)}</span>
           </div>
           <div className="summary-row" style={{ borderBottom: 'none' }}>
@@ -487,7 +616,7 @@ export default function ConsolidateClient() {
           <div className="flex-1 flex flex-col items-center gap-1">
             <Zap className="w-5 h-5" style={{ color: 'hsl(var(--warning))' }} />
             <span className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
-              Gasless on Base
+              Optimized Routes
             </span>
           </div>
           <div className="flex-1 flex flex-col items-center gap-1">
@@ -514,7 +643,7 @@ export default function ConsolidateClient() {
           </button>
           
           <p className="text-xs text-center mt-3" style={{ color: 'hsl(var(--text-tertiary))' }}>
-            By proceeding, you agree to our terms of service
+            You will be asked to approve each transaction
           </p>
         </motion.div>
       </div>
