@@ -57,13 +57,16 @@ const MOCK_JOB: ConsolidationJob = {
 // E2E Functions
 // ═══════════════════════════════════════════════════════════════════════════════
 
+let jobCounter = 0;
+
 function createConsolidationJob(
   wallet: string,
   tokens: TokenInput[],
   outputToken: 'ETH' | 'USDC'
 ): ConsolidationJob {
+  jobCounter++;
   return {
-    id: `job-${Date.now()}`,
+    id: `job-${Date.now()}-${jobCounter}-${Math.random().toString(36).substr(2, 9)}`,
     wallet,
     stage: 'scan',
     tokens,
@@ -87,15 +90,19 @@ function advanceStage(job: ConsolidationJob): ConsolidationJob {
   const currentIndex = stageOrder.indexOf(job.stage);
   
   if (currentIndex < stageOrder.length - 1) {
+    const nextStage = stageOrder[currentIndex + 1];
     return {
       ...job,
-      stage: stageOrder[currentIndex + 1],
+      stage: nextStage,
+      // Set endTime when reaching complete stage
+      ...(nextStage === 'complete' ? { endTime: Date.now() } : {}),
     };
   }
   
+  // Already at complete, just return with endTime set
   return {
     ...job,
-    endTime: Date.now(),
+    endTime: job.endTime || Date.now(),
   };
 }
 
@@ -342,9 +349,9 @@ describe('Complete E2E Scenario', () => {
     // Step 1: Create job
     const wallet = '0x1234567890123456789012345678901234567890';
     const tokens: TokenInput[] = [
-      { address: '0xa', chainId: 1, symbol: 'SHIB', amount: '1000000', amountUsd: 5 },
-      { address: '0xb', chainId: 8453, symbol: 'PEPE', amount: '500000', amountUsd: 3 },
-      { address: '0xc', chainId: 42161, symbol: 'DOGE', amount: '100', amountUsd: 8 },
+      { address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', chainId: 1, symbol: 'SHIB', amount: '1000000', amountUsd: 5 },
+      { address: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', chainId: 8453, symbol: 'PEPE', amount: '500000', amountUsd: 3 },
+      { address: '0xcccccccccccccccccccccccccccccccccccccccc', chainId: 42161, symbol: 'DOGE', amount: '100', amountUsd: 8 },
     ];
     
     let job = createConsolidationJob(wallet, tokens, 'ETH');
