@@ -88,23 +88,26 @@ const TIERS = {
   RISK: { label: 'Risk', color: 'danger', description: 'Potential security risk' },
 };
 
-// Output tokens on Base - should be excluded from selection
-const BASE_OUTPUT_TOKENS = {
-  ETH: [
-    '0x4200000000000000000000000000000000000006', // WETH on Base
-    '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', // Native ETH sentinel
-  ],
-  USDC: [
-    '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // USDC on Base
-  ],
-};
+// Import smart selection system
+import { 
+  smartSelectAll, 
+  selectDustOnly, 
+  selectBaseOnly, 
+  selectHighValueDust,
+  getSelectionPresets,
+  validateSelection,
+  analyzeToken,
+  SELECTION_CONFIG,
+  type SelectionResult,
+  type TokenRecommendation,
+} from '@/lib/smartSelection';
 
 // Check if token is an output token on Base
-function isBaseOutputToken(token: Token): boolean {
-  if (token.chainId !== 8453) return false; // Only check Base tokens
+function isBaseOutputToken(token: Token, outputToken: 'ETH' | 'USDC' = 'ETH'): boolean {
+  if (token.chainId !== 8453) return false;
   const address = token.address.toLowerCase();
-  const allOutputAddresses = [...BASE_OUTPUT_TOKENS.ETH, ...BASE_OUTPUT_TOKENS.USDC];
-  return allOutputAddresses.includes(address);
+  const outputAddresses = SELECTION_CONFIG.BASE_OUTPUT_TOKENS[outputToken];
+  return outputAddresses.some(addr => addr.toLowerCase() === address);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -275,61 +278,86 @@ function TokenCard({
   onAmountChange,
   showEditor,
   onToggleEditor,
+  outputToken = 'ETH',
 }: { 
   token: Token; 
   selected: boolean; 
   onToggle: () => void;
   index: number;
-  amount: string; // Percentage "100" = all
+  amount: string;
   onAmountChange: (amount: string) => void;
   showEditor: boolean;
   onToggleEditor: () => void;
+  outputToken?: 'ETH' | 'USDC';
 }) {
   const tierConfig = TIERS[token.tier];
   const chainConfig = CHAINS[token.chainId];
-  const isOutputToken = isBaseOutputToken(token);
+  const isOutput = isBaseOutputToken(token, outputToken);
   const amountPct = parseInt(amount || '100');
   const actualValue = token.balanceUsd * (amountPct / 100);
   const actualBalance = parseFloat(token.balance) * (amountPct / 100);
+  
+  // Get smart recommendation for this token
+  const recommendation = useMemo(() => analyzeToken(token as any, outputToken), [token, outputToken]);
+  const isBlocked = recommendation.action === 'skip' && recommendation.priority === 0;
+  const hasWarning = recommendation.action === 'warning';
+  const isRecommended = recommendation.action === 'select' && recommendation.priority >= 7;
   
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.02 }}
-      className={`token-card ${selected ? 'selected' : ''} ${isOutputToken ? 'opacity-60' : ''}`}
+      className={`token-card ${selected ? 'selected' : ''} ${isBlocked ? 'opacity-50' : ''}`}
+      style={isRecommended && !selected ? { 
+        borderColor: 'hsl(var(--success) / 0.3)',
+        background: 'hsl(var(--success) / 0.03)',
+      } : hasWarning ? {
+        borderColor: 'hsl(var(--warning) / 0.3)',
+      } : undefined}
     >
       <div 
         className="flex items-center gap-3 flex-1"
         onClick={() => {
-          if (isOutputToken) return;
+          if (isBlocked) return;
           onToggle();
         }}
-        style={isOutputToken ? { cursor: 'not-allowed' } : { cursor: 'pointer' }}
+        style={isBlocked ? { cursor: 'not-allowed' } : { cursor: 'pointer' }}
       >
         <input
           type="checkbox"
           className="checkbox"
           checked={selected}
-          disabled={isOutputToken}
+          disabled={isBlocked}
           onChange={() => {}}
         />
         
-        {/* Token Icon */}
-        <div 
-          className="token-icon"
-          style={token.logo ? { 
-            backgroundImage: `url(${token.logo})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          } : undefined}
-        >
-          {!token.logo && token.symbol.slice(0, 2)}
+        {/* Token Icon with recommendation indicator */}
+        <div className="relative">
+          <div 
+            className="token-icon"
+            style={token.logo ? { 
+              backgroundImage: `url(${token.logo})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            } : undefined}
+          >
+            {!token.logo && token.symbol.slice(0, 2)}
+          </div>
+          {isRecommended && (
+            <div 
+              className="absolute -top-1 -right-1 w-3 h-3 rounded-full flex items-center justify-center"
+              style={{ background: 'hsl(var(--success))' }}
+              title="Recommended"
+            >
+              <CheckCircle className="w-2 h-2 text-white" />
+            </div>
+          )}
         </div>
         
         {/* Token Info */}
         <div className="token-info">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="token-name">{token.symbol}</span>
             <span 
               className={`badge badge-${tierConfig.color}`} 
@@ -337,17 +365,28 @@ function TokenCard({
             >
               {tierConfig.label}
             </span>
-            {isOutputToken && (
+            {isOutput && (
               <span 
                 className="badge" 
-                style={{ 
-                  height: 20, 
-                  fontSize: 10, 
-                  background: 'hsl(var(--accent-light))', 
-                  color: 'hsl(var(--accent))' 
-                }}
+                style={{ height: 20, fontSize: 10, background: 'hsl(var(--bg-tertiary))' }}
               >
                 Output
+              </span>
+            )}
+            {isRecommended && !selected && (
+              <span 
+                className="badge badge-success" 
+                style={{ height: 20, fontSize: 10 }}
+              >
+                ★ Recommended
+              </span>
+            )}
+            {hasWarning && (
+              <span 
+                className="badge badge-warning" 
+                style={{ height: 20, fontSize: 10 }}
+              >
+                ⚠ Caution
               </span>
             )}
           </div>
@@ -362,6 +401,11 @@ function TokenCard({
                 className="w-3 h-3" 
                 style={{ color: 'hsl(var(--warning))' }} 
               />
+            )}
+            {recommendation.estimatedNetGain > 0 && (
+              <span className="text-xs" style={{ color: 'hsl(var(--success))' }}>
+                +${recommendation.estimatedNetGain.toFixed(2)}
+              </span>
             )}
           </div>
         </div>
@@ -384,7 +428,7 @@ function TokenCard({
         </div>
         
         {/* Amount Editor Button */}
-        {selected && !isOutputToken && (
+        {selected && !isBlocked && (
           <button
             className="btn btn-ghost btn-sm btn-icon"
             onClick={(e) => {
@@ -417,6 +461,13 @@ function TokenCard({
             style={{ borderTop: '1px solid hsl(var(--border))' }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Recommendation reason */}
+            {recommendation.reason && (
+              <p className="text-xs mb-2" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                💡 {recommendation.reason}
+              </p>
+            )}
+            
             <div className="flex items-center gap-2">
               <span className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
                 Amount:
@@ -578,7 +629,10 @@ export default function ScanClient() {
   const [filterTier, setFilterTier] = useState<string | null>(null);
   const [filterChain, setFilterChain] = useState<number | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [showAmountEditor, setShowAmountEditor] = useState<string | null>(null); // Token ID being edited
+  const [showAmountEditor, setShowAmountEditor] = useState<string | null>(null);
+  const [outputToken, setOutputToken] = useState<'ETH' | 'USDC'>('ETH');
+  const [selectionMode, setSelectionMode] = useState<'smart' | 'dustOnly' | 'baseOnly' | 'highValue' | 'manual'>('smart');
+  const [selectionResult, setSelectionResult] = useState<SelectionResult | null>(null);
   
   // Auto-fill connected wallet
   useEffect(() => {
@@ -651,13 +705,20 @@ export default function ScanClient() {
         result.scanTime = Date.now() - startTime;
         setScanResult(result);
         
-        // Auto-select consolidatable tokens (DUST + MICRODUST, not RISK, not output tokens on Base)
-        const consolidatable = result.tokens.filter(
-          t => (t.tier === 'DUST' || t.tier === 'MICRODUST') && 
-               t.riskScore < 70 && 
-               !isBaseOutputToken(t) // Exclude ETH/USDC on Base as they are output targets
-        );
-        setSelectedTokens(new Set(consolidatable.map(t => t.id)));
+        // Smart auto-selection using intelligent algorithm
+        const smartResult = smartSelectAll(result.tokens as any, outputToken);
+        setSelectionResult(smartResult);
+        setSelectedTokens(smartResult.selectedIds);
+        
+        // Show recommendations summary
+        const selectedCount = smartResult.selectedIds.size;
+        const skippedCount = result.tokens.length - selectedCount;
+        console.log('[SMART SELECT]', {
+          selected: selectedCount,
+          skipped: skippedCount,
+          summary: smartResult.summary,
+          warnings: smartResult.warnings,
+        });
         
         if (result.tokens.length > 0) {
           toastSuccess(
@@ -710,15 +771,39 @@ export default function ScanClient() {
     });
   };
 
-  const selectAllDust = () => {
+  // Smart selection handlers
+  const applySmartSelect = useCallback(() => {
     if (!scanResult) return;
-    const dustIds = scanResult.tokens
-      .filter(t => (t.tier === 'DUST' || t.tier === 'MICRODUST') && 
-                   t.riskScore < 70 &&
-                   !isBaseOutputToken(t)) // Exclude output tokens on Base
-      .map(t => t.id);
-    setSelectedTokens(new Set(dustIds));
-  };
+    const result = smartSelectAll(scanResult.tokens as any, outputToken);
+    setSelectionResult(result);
+    setSelectedTokens(result.selectedIds);
+    setSelectionMode('smart');
+    
+    if (result.warnings.length > 0) {
+      toastError('Selection Warnings', result.warnings[0]);
+    }
+  }, [scanResult, outputToken, toastError]);
+
+  const applyDustOnly = useCallback(() => {
+    if (!scanResult) return;
+    const ids = selectDustOnly(scanResult.tokens as any, outputToken);
+    setSelectedTokens(ids);
+    setSelectionMode('dustOnly');
+  }, [scanResult, outputToken]);
+
+  const applyBaseOnly = useCallback(() => {
+    if (!scanResult) return;
+    const ids = selectBaseOnly(scanResult.tokens as any, outputToken);
+    setSelectedTokens(ids);
+    setSelectionMode('baseOnly');
+  }, [scanResult, outputToken]);
+
+  const applyHighValue = useCallback(() => {
+    if (!scanResult) return;
+    const ids = selectHighValueDust(scanResult.tokens as any, 1, outputToken);
+    setSelectedTokens(ids);
+    setSelectionMode('highValue');
+  }, [scanResult, outputToken]);
 
   const clearSelection = () => setSelectedTokens(new Set());
 
@@ -921,34 +1006,84 @@ export default function ScanClient() {
         {/* Summary */}
         {scanResult && <ResultsSummary result={scanResult} />}
 
-        {/* Quick Actions */}
+        {/* Smart Selection Presets */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="flex gap-2 mb-4"
+          className="mb-4"
         >
-          <button 
-            className="btn btn-secondary btn-sm flex-1"
-            onClick={selectAllDust}
-          >
-            <Sparkles className="w-4 h-4" />
-            Select All Dust
-          </button>
-          {selectedTokens.size > 0 && (
+          {/* Selection Mode Buttons */}
+          <div className="flex gap-2 mb-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
             <button 
-              className="btn btn-ghost btn-sm"
-              onClick={clearSelection}
+              className={`btn btn-sm whitespace-nowrap ${selectionMode === 'smart' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={applySmartSelect}
             >
-              Clear
+              <Sparkles className="w-4 h-4" />
+              Smart
             </button>
+            <button 
+              className={`btn btn-sm whitespace-nowrap ${selectionMode === 'dustOnly' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={applyDustOnly}
+            >
+              Dust Only
+            </button>
+            <button 
+              className={`btn btn-sm whitespace-nowrap ${selectionMode === 'baseOnly' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={applyBaseOnly}
+            >
+              Base Only
+            </button>
+            <button 
+              className={`btn btn-sm whitespace-nowrap ${selectionMode === 'highValue' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={applyHighValue}
+            >
+              High Value
+            </button>
+            {selectedTokens.size > 0 && (
+              <button 
+                className="btn btn-ghost btn-sm"
+                onClick={clearSelection}
+              >
+                Clear
+              </button>
+            )}
+            <button 
+              className="btn btn-ghost btn-sm btn-icon ml-auto"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <Filter className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Selection Info */}
+          {selectionResult && selectedTokens.size > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="text-xs p-2 rounded-lg"
+              style={{ background: 'hsl(var(--bg-tertiary))' }}
+            >
+              <div className="flex items-center justify-between">
+                <span style={{ color: 'hsl(var(--text-tertiary))' }}>
+                  Est. output: <strong style={{ color: 'hsl(var(--success))' }}>
+                    ${selectionResult.summary.estimatedOutput.toFixed(2)}
+                  </strong>
+                </span>
+                <span style={{ color: 'hsl(var(--text-tertiary))' }}>
+                  Fees: ~${selectionResult.summary.estimatedFees.toFixed(2)}
+                </span>
+                <span 
+                  className={`badge badge-sm ${
+                    selectionResult.summary.riskLevel === 'low' ? 'badge-success' :
+                    selectionResult.summary.riskLevel === 'medium' ? 'badge-warning' : 'badge-danger'
+                  }`}
+                >
+                  {selectionResult.summary.riskLevel} risk
+                </span>
+              </div>
+            </motion.div>
           )}
-          <button 
-            className="btn btn-ghost btn-sm btn-icon"
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            <Filter className="w-4 h-4" />
-          </button>
         </motion.div>
 
         {/* Filters */}
@@ -1008,6 +1143,7 @@ export default function ScanClient() {
               onAmountChange={(amt) => setTokenAmounts(prev => ({ ...prev, [token.id]: amt }))}
               showEditor={showAmountEditor === token.id}
               onToggleEditor={() => setShowAmountEditor(showAmountEditor === token.id ? null : token.id)}
+              outputToken={outputToken}
             />
           ))}
         </div>
