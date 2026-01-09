@@ -42,6 +42,11 @@ interface Token {
   reasons?: string[];
 }
 
+// Track custom amounts per token
+interface TokenAmounts {
+  [tokenId: string]: string; // percentage as string (e.g., "100", "50")
+}
+
 interface ScanResult {
   wallet: string;
   totalValue: number;
@@ -265,16 +270,27 @@ function TokenCard({
   token, 
   selected, 
   onToggle,
-  index 
+  index,
+  amount,
+  onAmountChange,
+  showEditor,
+  onToggleEditor,
 }: { 
   token: Token; 
   selected: boolean; 
   onToggle: () => void;
   index: number;
+  amount: string; // Percentage "100" = all
+  onAmountChange: (amount: string) => void;
+  showEditor: boolean;
+  onToggleEditor: () => void;
 }) {
   const tierConfig = TIERS[token.tier];
   const chainConfig = CHAINS[token.chainId];
   const isOutputToken = isBaseOutputToken(token);
+  const amountPct = parseInt(amount || '100');
+  const actualValue = token.balanceUsd * (amountPct / 100);
+  const actualBalance = parseFloat(token.balance) * (amountPct / 100);
   
   return (
     <motion.div
@@ -282,80 +298,162 @@ function TokenCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.02 }}
       className={`token-card ${selected ? 'selected' : ''} ${isOutputToken ? 'opacity-60' : ''}`}
-      onClick={() => {
-        if (isOutputToken) return; // Prevent clicking output tokens
-        onToggle();
-      }}
-      style={isOutputToken ? { cursor: 'not-allowed' } : undefined}
     >
-      <input
-        type="checkbox"
-        className="checkbox"
-        checked={selected}
-        disabled={isOutputToken}
-        onChange={() => {}}
-      />
-      
-      {/* Token Icon */}
       <div 
-        className="token-icon"
-        style={token.logo ? { 
-          backgroundImage: `url(${token.logo})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        } : undefined}
+        className="flex items-center gap-3 flex-1"
+        onClick={() => {
+          if (isOutputToken) return;
+          onToggle();
+        }}
+        style={isOutputToken ? { cursor: 'not-allowed' } : { cursor: 'pointer' }}
       >
-        {!token.logo && token.symbol.slice(0, 2)}
-      </div>
-      
-      {/* Token Info */}
-      <div className="token-info">
-        <div className="flex items-center gap-2">
-          <span className="token-name">{token.symbol}</span>
-          <span 
-            className={`badge badge-${tierConfig.color}`} 
-            style={{ height: 20, fontSize: 10 }}
-          >
-            {tierConfig.label}
-          </span>
-          {isOutputToken && (
+        <input
+          type="checkbox"
+          className="checkbox"
+          checked={selected}
+          disabled={isOutputToken}
+          onChange={() => {}}
+        />
+        
+        {/* Token Icon */}
+        <div 
+          className="token-icon"
+          style={token.logo ? { 
+            backgroundImage: `url(${token.logo})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          } : undefined}
+        >
+          {!token.logo && token.symbol.slice(0, 2)}
+        </div>
+        
+        {/* Token Info */}
+        <div className="token-info">
+          <div className="flex items-center gap-2">
+            <span className="token-name">{token.symbol}</span>
             <span 
-              className="badge" 
-              style={{ 
-                height: 20, 
-                fontSize: 10, 
-                background: 'hsl(var(--accent-light))', 
-                color: 'hsl(var(--accent))' 
-              }}
+              className={`badge badge-${tierConfig.color}`} 
+              style={{ height: 20, fontSize: 10 }}
             >
-              Output
+              {tierConfig.label}
             </span>
-          )}
-        </div>
-        <div className="token-value flex items-center gap-1.5">
-          <span 
-            className="inline-block w-2 h-2 rounded-full"
-            style={{ background: chainConfig?.color || '#666' }}
-          />
-          <span>{chainConfig?.name || 'Unknown'}</span>
-          {token.riskScore > 50 && (
-            <AlertTriangle 
-              className="w-3 h-3" 
-              style={{ color: 'hsl(var(--warning))' }} 
+            {isOutputToken && (
+              <span 
+                className="badge" 
+                style={{ 
+                  height: 20, 
+                  fontSize: 10, 
+                  background: 'hsl(var(--accent-light))', 
+                  color: 'hsl(var(--accent))' 
+                }}
+              >
+                Output
+              </span>
+            )}
+          </div>
+          <div className="token-value flex items-center gap-1.5">
+            <span 
+              className="inline-block w-2 h-2 rounded-full"
+              style={{ background: chainConfig?.color || '#666' }}
             />
-          )}
+            <span>{chainConfig?.name || 'Unknown'}</span>
+            {token.riskScore > 50 && (
+              <AlertTriangle 
+                className="w-3 h-3" 
+                style={{ color: 'hsl(var(--warning))' }} 
+              />
+            )}
+          </div>
         </div>
       </div>
       
-      {/* Amount */}
-      <div className="token-amount">
-        <div className="token-usd">
-          ${token.balanceUsd < 0.01 ? '<0.01' : token.balanceUsd.toFixed(2)}
+      {/* Amount & Edit */}
+      <div className="flex items-center gap-2">
+        <div className="token-amount text-right">
+          <div className="token-usd">
+            ${actualValue < 0.01 ? '<0.01' : actualValue.toFixed(2)}
+            {amountPct < 100 && (
+              <span className="text-xs ml-1" style={{ color: 'hsl(var(--accent))' }}>
+                ({amountPct}%)
+              </span>
+            )}
+          </div>
+          <div className="token-balance">
+            {actualBalance.toFixed(4)}
+          </div>
         </div>
-        <div className="token-balance">
-          {parseFloat(token.balance).toFixed(4)}
-        </div>
+        
+        {/* Amount Editor Button */}
+        {selected && !isOutputToken && (
+          <button
+            className="btn btn-ghost btn-sm btn-icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleEditor();
+            }}
+            title="Adjust amount"
+            style={{ 
+              minWidth: 28, 
+              height: 28,
+              background: showEditor ? 'hsl(var(--accent-light))' : undefined
+            }}
+          >
+            <ChevronDown 
+              className={`w-4 h-4 transition-transform ${showEditor ? 'rotate-180' : ''}`}
+              style={{ color: 'hsl(var(--accent))' }}
+            />
+          </button>
+        )}
       </div>
+
+      {/* Amount Editor Dropdown */}
+      <AnimatePresence>
+        {showEditor && selected && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="w-full mt-3 pt-3"
+            style={{ borderTop: '1px solid hsl(var(--border))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                Amount:
+              </span>
+              <div className="flex gap-1 flex-1">
+                {[25, 50, 75, 100].map(pct => (
+                  <button
+                    key={pct}
+                    className={`flex-1 py-1 px-2 rounded-lg text-xs font-medium transition-all ${
+                      amountPct === pct 
+                        ? 'bg-[hsl(var(--accent))] text-white' 
+                        : 'bg-[hsl(var(--bg-tertiary))]'
+                    }`}
+                    onClick={() => onAmountChange(pct.toString())}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mt-2">
+              <input
+                type="range"
+                min="1"
+                max="100"
+                value={amountPct}
+                onChange={(e) => onAmountChange(e.target.value)}
+                className="flex-1"
+                style={{ accentColor: 'hsl(var(--accent))' }}
+              />
+              <span className="text-xs font-medium w-10 text-right">
+                {amountPct}%
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -476,9 +574,11 @@ export default function ScanClient() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [selectedTokens, setSelectedTokens] = useState<Set<string>>(new Set());
+  const [tokenAmounts, setTokenAmounts] = useState<TokenAmounts>({}); // Custom amounts per token
   const [filterTier, setFilterTier] = useState<string | null>(null);
   const [filterChain, setFilterChain] = useState<number | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [showAmountEditor, setShowAmountEditor] = useState<string | null>(null); // Token ID being edited
   
   // Auto-fill connected wallet
   useEffect(() => {
@@ -626,14 +726,26 @@ export default function ScanClient() {
     if (!scanResult) return 0;
     return scanResult.tokens
       .filter(t => selectedTokens.has(t.id))
-      .reduce((sum, t) => sum + t.balanceUsd, 0);
-  }, [scanResult, selectedTokens]);
+      .reduce((sum, t) => {
+        const pct = parseInt(tokenAmounts[t.id] || '100') / 100;
+        return sum + (t.balanceUsd * pct);
+      }, 0);
+  }, [scanResult, selectedTokens, tokenAmounts]);
 
   // Proceed to consolidate
   const handleConsolidate = () => {
     if (selectedTokens.size === 0) return;
     
-    const tokensToConsolidate = scanResult?.tokens.filter(t => selectedTokens.has(t.id)) || [];
+    const tokensToConsolidate = scanResult?.tokens
+      .filter(t => selectedTokens.has(t.id))
+      .map(t => ({
+        ...t,
+        // Include custom amount percentage
+        amountPct: parseInt(tokenAmounts[t.id] || '100'),
+        // Calculate actual balance to swap based on percentage
+        swapBalance: (parseFloat(t.balance) * (parseInt(tokenAmounts[t.id] || '100') / 100)).toString(),
+        swapBalanceUsd: t.balanceUsd * (parseInt(tokenAmounts[t.id] || '100') / 100),
+      })) || [];
     
     sessionStorage.setItem('vortex_consolidation', JSON.stringify({
       wallet: scanResult?.wallet,
@@ -892,6 +1004,10 @@ export default function ScanClient() {
               selected={selectedTokens.has(token.id)}
               onToggle={() => toggleToken(token.id)}
               index={i}
+              amount={tokenAmounts[token.id] || '100'}
+              onAmountChange={(amt) => setTokenAmounts(prev => ({ ...prev, [token.id]: amt }))}
+              showEditor={showAmountEditor === token.id}
+              onToggleEditor={() => setShowAmountEditor(showAmountEditor === token.id ? null : token.id)}
             />
           ))}
         </div>

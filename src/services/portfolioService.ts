@@ -31,6 +31,7 @@ export interface TokenHolding {
 
 /**
  * Fetch token holdings via Moralis (EVM chains)
+ * IMPROVED: Fetch ALL tokens including spam/dust with no minimum value filter
  */
 async function fetchTokensViaMoralis(
   walletAddress: string,
@@ -56,8 +57,16 @@ async function fetchTokensViaMoralis(
       return await fetchTokensViaAlchemy(walletAddress, chainId);
     }
 
+    // Check if Moralis API key is configured
+    if (!env.MORALIS_API_KEY) {
+      logger.warn({ chainId }, 'Moralis API key not configured, using Alchemy fallback');
+      return await fetchTokensViaAlchemy(walletAddress, chainId);
+    }
+
+    // Fetch with exclude_spam=false to get ALL tokens including potential dust
+    // Also include token prices
     const response = await fetch(
-      `${env.NEXT_PUBLIC_MORALIS_API_URL || 'https://deep-index.moralis.io/api/v2.2'}/${walletAddress}/erc20?chain=${chain}`,
+      `${env.NEXT_PUBLIC_MORALIS_API_URL || 'https://deep-index.moralis.io/api/v2.2'}/${walletAddress}/erc20?chain=${chain}&exclude_spam=false&exclude_native=false`,
       {
         headers: {
           'X-API-Key': env.MORALIS_API_KEY,
@@ -67,14 +76,23 @@ async function fetchTokensViaMoralis(
     );
 
     if (!response.ok) {
-      throw new Error(`Moralis API error: ${response.statusText}`);
+      const errorText = await response.text();
+      logger.error({ chainId, status: response.status, error: errorText }, 'Moralis API error');
+      // Fall back to Alchemy on error
+      return await fetchTokensViaAlchemy(walletAddress, chainId);
     }
 
     const data = await response.json();
+    
+    logger.info({ 
+      chainId, 
+      rawResultCount: data.result?.length || 0,
+      cursor: data.cursor || 'none'
+    }, 'Moralis raw response');
 
     const tokens: TokenHolding[] = (data.result || [])
       .filter((token: any) => {
-        // Filter out zero balance tokens at source
+        // Only filter out truly zero balance tokens
         const balance = BigInt(token.balance || '0');
         return balance > 0n;
       })
@@ -83,6 +101,7 @@ async function fetchTokensViaMoralis(
         const balance = BigInt(token.balance || '0');
         const balanceFormatted = (Number(balance) / 10 ** decimals).toString();
         const priceUsd = parseFloat(token.usd_price || '0');
+        // Calculate value - if no price, still include token with 0 value
         const valueUsd = parseFloat(token.usd_value || '0') || (parseFloat(balanceFormatted) * priceUsd);
 
         return {
@@ -102,21 +121,46 @@ async function fetchTokensViaMoralis(
       });
 
     logger.info({ chainId, tokensFound: tokens.length, totalFromAPI: data.result?.length || 0 }, 'Moralis fetch success');
+    
+    // If Moralis returns very few tokens, also try Alchemy as supplement
+    if (tokens.length < 3 && env.NEXT_PUBLIC_ALCHEMY_API_KEY) {
+      logger.info({ chainId }, 'Low token count from Moralis, supplementing with Alchemy');
+      try {
+        const alchemyTokens = await fetchTokensViaAlchemy(walletAddress, chainId);
+        // Merge tokens, avoiding duplicates
+        const existingAddresses = new Set(tokens.map(t => t.address.toLowerCase()));
+        for (const t of alchemyTokens) {
+          if (!existingAddresses.has(t.address.toLowerCase())) {
+            tokens.push(t);
+          }
+        }
+        logger.info({ chainId, afterMerge: tokens.length }, 'Merged Alchemy tokens');
+      } catch (e) {
+        // Ignore Alchemy errors
+      }
+    }
+    
     return tokens;
   } catch (error) {
-    logger.error({ error, walletAddress, chainId }, 'Moralis fetch failed');
-    return [];
+    logger.error({ error, walletAddress, chainId }, 'Moralis fetch failed, trying Alchemy');
+    return await fetchTokensViaAlchemy(walletAddress, chainId);
   }
 }
 
 /**
  * Fallback: Fetch tokens via Alchemy (for chains not on Moralis)
+ * IMPROVED: Fetch metadata and prices for each token
  */
 async function fetchTokensViaAlchemy(
   walletAddress: string,
   chainId: number
 ): Promise<TokenHolding[]> {
   try {
+    if (!env.NEXT_PUBLIC_ALCHEMY_API_KEY) {
+      logger.warn({ chainId }, 'Alchemy API key not configured');
+      return [];
+    }
+
     const alchemyUrls: Record<number, string> = {
       1: `https://eth-mainnet.g.alchemy.com/v2/${env.NEXT_PUBLIC_ALCHEMY_API_KEY}`,
       8453: `https://base-mainnet.g.alchemy.com/v2/${env.NEXT_PUBLIC_ALCHEMY_API_KEY}`,
@@ -124,17 +168,17 @@ async function fetchTokensViaAlchemy(
       10: `https://opt-mainnet.g.alchemy.com/v2/${env.NEXT_PUBLIC_ALCHEMY_API_KEY}`,
       137: `https://polygon-mainnet.g.alchemy.com/v2/${env.NEXT_PUBLIC_ALCHEMY_API_KEY}`,
       324: `https://zksync-mainnet.g.alchemy.com/v2/${env.NEXT_PUBLIC_ALCHEMY_API_KEY}`,
-      // 838592: Monad - Alchemy may not support yet, will try RPC fallback
+      56: `https://bnb-mainnet.g.alchemy.com/v2/${env.NEXT_PUBLIC_ALCHEMY_API_KEY}`,
+      43114: `https://avax-mainnet.g.alchemy.com/v2/${env.NEXT_PUBLIC_ALCHEMY_API_KEY}`,
     };
 
     const baseUrl = alchemyUrls[chainId];
     if (!baseUrl) {
-      // For unsupported chains like Monad, return empty for now
-      // Monad mainnet RPC token scanning requires custom implementation
-      logger.warn({ chainId }, 'Chain not supported by Alchemy, returning empty');
+      logger.warn({ chainId }, 'Chain not supported by Alchemy');
       return [];
     }
 
+    // Get token balances
     const response = await fetch(baseUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -142,33 +186,97 @@ async function fetchTokensViaAlchemy(
         jsonrpc: '2.0',
         id: 1,
         method: 'alchemy_getTokenBalances',
-        params: [walletAddress],
+        params: [walletAddress, 'erc20'], // Get all ERC20 tokens
       }),
       signal: AbortSignal.timeout(TIMEOUTS.API),
     });
 
     const data = await response.json();
     const tokenBalances = data.result?.tokenBalances || [];
+    
+    logger.info({ chainId, rawTokenCount: tokenBalances.length }, 'Alchemy raw token count');
 
-    // Fetch metadata for each token
-    const tokens: TokenHolding[] = [];
-    for (const tb of tokenBalances.slice(0, 50)) { // Limit to 50 tokens
-      if (tb.tokenBalance === '0x0') continue;
-      
-      const balance = BigInt(tb.tokenBalance).toString();
-      tokens.push({
-        chainId,
-        address: tb.contractAddress,
-        symbol: 'UNKNOWN',
-        name: 'Unknown Token',
-        decimals: 18,
-        balance,
-        balanceFormatted: (Number(balance) / 1e18).toString(),
-        priceUsd: 0,
-        valueUsd: 0,
-      });
+    // Filter non-zero balances and limit to 100 tokens
+    const nonZeroBalances = tokenBalances
+      .filter((tb: any) => tb.tokenBalance && tb.tokenBalance !== '0x0' && tb.tokenBalance !== '0x')
+      .slice(0, 100);
+
+    if (nonZeroBalances.length === 0) {
+      return [];
     }
 
+    // Batch fetch metadata for all tokens
+    const metadataResponse = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'alchemy_getTokenMetadata',
+        params: nonZeroBalances.map((tb: any) => tb.contractAddress),
+      }),
+      signal: AbortSignal.timeout(TIMEOUTS.API),
+    });
+
+    // Note: alchemy_getTokenMetadata might not support batch, fetch individually
+    const tokens: TokenHolding[] = [];
+    
+    for (const tb of nonZeroBalances) {
+      try {
+        const balance = BigInt(tb.tokenBalance);
+        if (balance === 0n) continue;
+
+        // Try to get metadata
+        let symbol = 'UNKNOWN';
+        let name = 'Unknown Token';
+        let decimals = 18;
+        let logo: string | undefined;
+
+        try {
+          const metaRes = await fetch(baseUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'alchemy_getTokenMetadata',
+              params: [tb.contractAddress],
+            }),
+            signal: AbortSignal.timeout(3000), // Quick timeout
+          });
+          const metaData = await metaRes.json();
+          if (metaData.result) {
+            symbol = metaData.result.symbol || symbol;
+            name = metaData.result.name || name;
+            decimals = metaData.result.decimals || decimals;
+            logo = metaData.result.logo;
+          }
+        } catch (e) {
+          // Ignore metadata errors
+        }
+
+        const balanceFormatted = (Number(balance) / 10 ** decimals).toString();
+        
+        tokens.push({
+          chainId,
+          address: tb.contractAddress,
+          symbol,
+          name,
+          decimals,
+          balance: balance.toString(),
+          balanceFormatted,
+          priceUsd: 0, // Alchemy doesn't provide prices
+          valueUsd: 0,
+          logoUrl: logo,
+          liquidityUsd: 0,
+          volume24hUsd: 0,
+        });
+      } catch (e) {
+        // Skip problematic tokens
+      }
+    }
+
+    logger.info({ chainId, tokensFound: tokens.length }, 'Alchemy fetch success');
     return tokens;
   } catch (error) {
     logger.error({ error, walletAddress, chainId }, 'Alchemy fetch failed');

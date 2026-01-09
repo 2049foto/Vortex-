@@ -152,6 +152,15 @@ export async function createConsolidationPlan(
       // Check if Relay supports this chain pair
       if (isRelaySupported(token.chainId, OUTPUT_CHAIN_ID)) {
         try {
+          logger.info({
+            token: token.symbol,
+            fromChain: token.chainId,
+            toChain: OUTPUT_CHAIN_ID,
+            amount: token.balance,
+            originCurrency: toRelayCurrency(token.address),
+            destinationCurrency: toRelayCurrency(targetToken),
+          }, 'Attempting Relay bridge quote');
+
           // Use Relay.link for cross-chain bridge
           const relayQuote = await getRelayQuote({
             user: walletAddress,
@@ -159,11 +168,20 @@ export async function createConsolidationPlan(
             destinationChainId: OUTPUT_CHAIN_ID,
             originCurrency: toRelayCurrency(token.address),
             destinationCurrency: toRelayCurrency(targetToken),
-            amount: token.balance,
+            amount: token.balance, // Amount in raw units (wei for ETH)
             tradeType: 'EXACT_INPUT',
           });
 
+          logger.info({
+            token: token.symbol,
+            stepsCount: relayQuote.steps?.length || 0,
+            hasStepData: !!(relayQuote.steps?.[0]?.items?.[0]?.data),
+            estimatedOutput: relayQuote.estimatedOutput,
+          }, 'Relay quote response');
+
           if (relayQuote.steps && relayQuote.steps.length > 0) {
+            const stepData = relayQuote.steps[0]?.items?.[0]?.data;
+            
             // Add bridge step to plan (client-side execution)
             plan.swaps.push({
               router: 'relay',
@@ -173,10 +191,10 @@ export async function createConsolidationPlan(
               expectedOut: relayQuote.estimatedOutput || '0',
               estimatedGas: '0', // Gas included in Relay fee
               priceImpact: 0,
-              tx: relayQuote.steps[0]?.items[0]?.data ? {
-                to: relayQuote.steps[0].items[0].data.to,
-                data: relayQuote.steps[0].items[0].data.data,
-                value: relayQuote.steps[0].items[0].data.value,
+              tx: stepData ? {
+                to: stepData.to,
+                data: stepData.data,
+                value: stepData.value || '0',
               } : undefined,
             });
 
@@ -185,14 +203,34 @@ export async function createConsolidationPlan(
             ).toString();
 
             logger.info(
-              { token: token.symbol, requestId: relayQuote.requestId },
+              { token: token.symbol, requestId: relayQuote.requestId, hasTx: !!stepData },
               'Relay bridge quote obtained'
             );
             continue;
+          } else {
+            logger.warn({ token: token.symbol }, 'Relay returned empty steps');
           }
-        } catch (relayError) {
-          logger.warn({ error: relayError, token: token.symbol }, 'Relay bridge failed');
+        } catch (relayError: any) {
+          logger.error({ 
+            error: relayError?.message || relayError, 
+            token: token.symbol,
+            fromChain: token.chainId,
+          }, 'Relay bridge failed');
+          
+          // Update token entry with specific error
+          const tokenEntry = plan.tokens.find(t => t.token.address === token.address);
+          if (tokenEntry) {
+            tokenEntry.action = 'skip';
+            tokenEntry.reason = `Relay bridge error: ${relayError?.message || 'Unknown error'}`;
+          }
+          continue;
         }
+      } else {
+        logger.info({ 
+          token: token.symbol, 
+          fromChain: token.chainId,
+          toChain: OUTPUT_CHAIN_ID,
+        }, 'Relay not supported for this chain pair');
       }
 
       // Relay not supported or failed - try fallback bridge service

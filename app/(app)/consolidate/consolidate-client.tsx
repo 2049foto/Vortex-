@@ -30,6 +30,10 @@ interface SelectedToken {
   balanceUsd: number;
   tier?: string;
   riskScore?: number;
+  // Custom amount support
+  amountPct?: number; // Percentage to swap (1-100)
+  swapBalance?: string; // Actual balance to swap
+  swapBalanceUsd?: number; // USD value to swap
 }
 
 interface ConsolidationData {
@@ -142,13 +146,14 @@ export default function ConsolidateClient() {
     return filterOutputTokens(data.tokens, outputToken);
   }, [data?.tokens, outputToken]);
 
-  // Calculate totals based on filtered tokens
+  // Calculate totals based on filtered tokens (using custom amounts if set)
   const totals = useMemo(() => {
     if (tokensToConsolidate.length === 0) return { value: 0, tokens: 0, chains: 0, excludedCount: 0 };
     const chains = new Set(tokensToConsolidate.map(t => t.chainId));
     const excludedCount = (data?.tokens?.length || 0) - tokensToConsolidate.length;
     return {
-      value: tokensToConsolidate.reduce((sum, t) => sum + t.balanceUsd, 0),
+      // Use swapBalanceUsd if available (custom amount), otherwise full balanceUsd
+      value: tokensToConsolidate.reduce((sum, t) => sum + (t.swapBalanceUsd ?? t.balanceUsd), 0),
       tokens: tokensToConsolidate.length,
       chains: chains.size,
       excludedCount,
