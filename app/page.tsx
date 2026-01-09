@@ -1,13 +1,25 @@
 /**
  * Vortex Protocol - Landing Page
- * Server component wrapper to prevent pre-rendering
+ * Premium Portfolio Hygiene Engine
  */
 
-import { LandingPageClient } from './landing-client';
+import LandingClient from './landing-client';
 
-// Force dynamic rendering - must be exported from server component
-export const dynamic = 'force-dynamic';
+export const metadata = {
+  title: 'Vortex Protocol | Clean Your Crypto Dust Across 11 Chains',
+  description: 'Premium Portfolio Hygiene Engine. Scan your wallet, identify dust & risky tokens with AI-powered risk scoring, and consolidate everything into usable ETH — gasless on Base.',
+  openGraph: {
+    title: 'Vortex Protocol | Clean Your Crypto Dust',
+    description: 'Scan 11 chains, AI risk scoring, gasless consolidation on Base.',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Vortex Protocol | Portfolio Hygiene',
+    description: 'Clean your crypto dust across 11 chains, gasless on Base.',
+  },
+};
 
 export default function HomePage() {
-  return <LandingPageClient />;
+  return <LandingClient />;
 }

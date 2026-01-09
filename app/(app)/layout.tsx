@@ -1,17 +1,14 @@
 /**
  * Vortex Protocol - App Layout
- * Server component wrapper to prevent pre-rendering
+ * Server component wrapper for authenticated app routes
  */
 
-import { AppLayoutClient } from './layout-client';
-
-// Force dynamic rendering - must be exported from server component
-export const dynamic = 'force-dynamic';
+import LayoutClient from './layout-client';
 
 export default function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <AppLayoutClient>{children}</AppLayoutClient>;
+  return <LayoutClient>{children}</LayoutClient>;
 }

@@ -20,7 +20,10 @@
     "test:performance": "k6 run tests/performance/k6-scan.js && k6 run tests/performance/k6-consolidate.js && k6 run tests/performance/k6-analytics.js",
     "test:performance:scan": "k6 run tests/performance/k6-scan.js",
     "test:performance:consolidate": "k6 run tests/performance/k6-consolidate.js",
-    "test:performance:analytics": "k6 run tests/performance/k6-analytics.js"
+    "test:performance:analytics": "k6 run tests/performance/k6-analytics.js",
+    "validate:env": "bun scripts/validate-env.ts",
+    "test:phase1": "bun scripts/test-phase1.ts",
+    "test:integration": "bun scripts/test-phase1.ts"
   },
   "dependencies": {
     "@coinbase/onchainkit": "^0.36.0",

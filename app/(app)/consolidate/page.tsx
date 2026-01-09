@@ -1,22 +1,31 @@
 /**
- * Vortex Protocol - Consolidate (Execute) Page
- * Server component wrapper
+ * Vortex Protocol - Consolidate Page
  */
 
 import { Suspense } from 'react';
-import { ConsolidatePageClient } from './consolidate-client';
+import ConsolidateClient from './consolidate-client';
 
-// Force dynamic rendering - must be exported from server component
-export const dynamic = 'force-dynamic';
+export const metadata = {
+  title: 'Consolidate | Vortex Protocol',
+  description: 'Consolidate your dust tokens into ETH or USDC, gasless on Base.',
+};
+
+function ConsolidateLoading() {
+  return (
+    <div className="page safe-top">
+      <div className="container py-8">
+        <div className="flex items-center justify-center py-20">
+          <div className="vortex-spinner w-16 h-16" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ConsolidatePage() {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent"></div>
-      </div>
-    }>
-      <ConsolidatePageClient />
+    <Suspense fallback={<ConsolidateLoading />}>
+      <ConsolidateClient />
     </Suspense>
   );
 }

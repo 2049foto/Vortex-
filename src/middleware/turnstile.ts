@@ -98,24 +98,36 @@ export async function verifyTurnstileToken(
 /**
  * Turnstile middleware for protected endpoints
  * 
- * ALWAYS ALLOWS REQUESTS - fail-open design
- * This is intentional for Phase 1 to avoid blocking users
- * when Turnstile is not properly configured.
+ * Behavior:
+ * - Development: Always allows requests (fail-open)
+ * - Production: Can be strict or fail-open based on TURNSTILE_STRICT_MODE
  * 
- * In Phase 2, this can be made stricter.
+ * To enable strict mode in production, set:
+ * TURNSTILE_STRICT_MODE=true
  */
 export async function requireTurnstile(
   token: string,
   remoteIp?: string
 ): Promise<void> {
-  // Always verify but never throw - fail-open design
   const result = await verifyTurnstileToken(token, remoteIp);
   
-  if (!result.success) {
-    // Log but don't throw - fail-open
-    logger.warn({ error: result.error }, 'Turnstile check failed but allowing request (fail-open)');
+  // Check if strict mode is enabled
+  const isStrictMode = process.env.TURNSTILE_STRICT_MODE === 'true';
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  // In strict production mode, throw error if verification fails
+  if (!result.success && isStrictMode && isProduction && isTurnstileConfigured()) {
+    logger.error({ error: result.error }, 'Turnstile verification failed in strict mode');
+    throw new Error(result.error || 'Turnstile verification failed');
   }
   
-  // Never throws - always allows request
+  // Fail-open: Log warning but allow request
+  if (!result.success) {
+    logger.warn(
+      { error: result.error, strictMode: isStrictMode, production: isProduction },
+      'Turnstile check failed but allowing request (fail-open mode)'
+    );
+  }
+  
   return;
 }

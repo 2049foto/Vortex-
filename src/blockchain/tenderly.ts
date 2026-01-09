@@ -63,7 +63,7 @@ export async function simulateTransaction(params: {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Access-Key': env.TENDERLY_API_KEY,
+        'X-Access-Key': env.TENDERLY_API_KEY || '',
       },
       body: JSON.stringify({
         network_id: params.chainId.toString(),
