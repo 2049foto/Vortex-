@@ -1,252 +1,261 @@
 'use client';
 
-/**
- * ═══════════════════════════════════════════════════════════════════════════════
- * VORTEX PROTOCOL - App Providers 2026
- * Web3, Query Client, Toast, and global state management
- * ═══════════════════════════════════════════════════════════════════════════════
- */
-
+import { useState, useEffect, createContext, useContext, useCallback } from 'react';
 import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, useEffect, createContext, useContext, useCallback, ReactNode } from 'react';
 import { wagmiConfig } from '@/lib/web3';
-import WalletConnectModal, { useWalletConnectModal } from '@/components/WalletConnectModal';
+import { AnimatePresence, motion } from 'framer-motion';
+import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TOAST CONTEXT
+// TOAST SYSTEM - Minimal & Non-intrusive
 // ═══════════════════════════════════════════════════════════════════════════════
+
+type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 interface Toast {
   id: string;
-  type: 'success' | 'error' | 'info' | 'warning';
+  type: ToastType;
   title: string;
-  message?: string;
+  description?: string;
 }
 
-interface ToastContextValue {
-  toasts: Toast[];
-  addToast: (toast: Omit<Toast, 'id'>) => void;
-  removeToast: (id: string) => void;
-  success: (title: string, message?: string) => void;
-  error: (title: string, message?: string) => void;
-  info: (title: string, message?: string) => void;
-  warning: (title: string, message?: string) => void;
+interface ToastContextType {
+  toast: (type: ToastType, title: string, description?: string) => void;
+  success: (title: string, description?: string) => void;
+  error: (title: string, description?: string) => void;
+  info: (title: string, description?: string) => void;
+  warning: (title: string, description?: string) => void;
 }
 
-const ToastContext = createContext<ToastContextValue | null>(null);
+const ToastContext = createContext<ToastContextType | null>(null);
 
 export function useToast() {
   const context = useContext(ToastContext);
   if (!context) {
-    // Return a no-op implementation if used outside provider
-    return {
-      toasts: [],
-      addToast: () => {},
-      removeToast: () => {},
-      success: () => {},
-      error: () => {},
-      info: () => {},
-      warning: () => {},
-    };
+    throw new Error('useToast must be used within ToastProvider');
   }
   return context;
 }
 
-function ToastProvider({ children }: { children: ReactNode }) {
+const TOAST_ICONS = {
+  success: CheckCircle,
+  error: AlertCircle,
+  info: Info,
+  warning: AlertTriangle,
+};
+
+const TOAST_COLORS = {
+  success: { bg: 'hsl(var(--success-light))', color: 'hsl(var(--success))' },
+  error: { bg: 'hsl(var(--danger-light))', color: 'hsl(var(--danger))' },
+  info: { bg: 'hsl(var(--accent-light))', color: 'hsl(var(--accent))' },
+  warning: { bg: 'hsl(var(--warning-light))', color: 'hsl(var(--warning))' },
+};
+
+function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
-    const id = Math.random().toString(36).slice(2);
-    setToasts((prev) => [...prev, { ...toast, id }]);
-    
-    // Auto remove after 5 seconds
+  const addToast = useCallback((type: ToastType, title: string, description?: string) => {
+    const id = `toast-${Date.now()}`;
+    setToasts(prev => [...prev, { id, type, title, description }]);
     setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 5000);
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
   }, []);
 
   const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // Convenience methods
-  const success = useCallback((title: string, message?: string) => {
-    addToast({ type: 'success', title, message });
-  }, [addToast]);
-
-  const error = useCallback((title: string, message?: string) => {
-    addToast({ type: 'error', title, message });
-  }, [addToast]);
-
-  const info = useCallback((title: string, message?: string) => {
-    addToast({ type: 'info', title, message });
-  }, [addToast]);
-
-  const warning = useCallback((title: string, message?: string) => {
-    addToast({ type: 'warning', title, message });
-  }, [addToast]);
+  const contextValue: ToastContextType = {
+    toast: addToast,
+    success: (title, desc) => addToast('success', title, desc),
+    error: (title, desc) => addToast('error', title, desc),
+    info: (title, desc) => addToast('info', title, desc),
+    warning: (title, desc) => addToast('warning', title, desc),
+  };
 
   return (
-    <ToastContext.Provider value={{ toasts, addToast, removeToast, success, error, info, warning }}>
+    <ToastContext.Provider value={contextValue}>
       {children}
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
+      
+      {/* Toast Container */}
+      <div 
+        className="fixed top-4 right-4 z-50 space-y-2"
+        style={{ maxWidth: '360px' }}
+      >
+        <AnimatePresence mode="popLayout">
+          {toasts.map(toast => {
+            const Icon = TOAST_ICONS[toast.type];
+            const colors = TOAST_COLORS[toast.type];
+            
+            return (
+              <motion.div
+                key={toast.id}
+                layout
+                initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 100 }}
+                className="flex items-start gap-3 p-4 rounded-xl"
+                style={{
+                  background: 'hsl(var(--bg-elevated))',
+                  border: '1px solid hsl(var(--border))',
+                  boxShadow: '0 8px 24px hsl(var(--shadow-color) / 0.1)',
+                }}
+              >
+                <div 
+                  className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ background: colors.bg }}
+                >
+                  <Icon className="w-4 h-4" style={{ color: colors.color }} />
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium" style={{ color: 'hsl(var(--text-primary))' }}>
+                    {toast.title}
+                  </p>
+                  {toast.description && (
+                    <p className="text-xs mt-0.5" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                      {toast.description}
+                    </p>
+                  )}
+                </div>
+                
+                <button
+                  onClick={() => removeToast(toast.id)}
+                  className="flex-shrink-0 p-1 rounded-lg hover:bg-[hsl(var(--bg-tertiary))] transition-colors"
+                >
+                  <X className="w-4 h-4" style={{ color: 'hsl(var(--text-tertiary))' }} />
+                </button>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+      </div>
     </ToastContext.Provider>
   );
 }
 
-function ToastContainer({ 
-  toasts, 
-  onRemove 
-}: { 
-  toasts: Toast[]; 
-  onRemove: (id: string) => void;
-}) {
-  if (toasts.length === 0) return null;
+// ═══════════════════════════════════════════════════════════════════════════════
+// LOADING SCREEN - Clean & Minimal
+// ═══════════════════════════════════════════════════════════════════════════════
 
-  const getToastStyles = (type: Toast['type']) => {
-    switch (type) {
-      case 'success':
-        return 'border-emerald-500/30 bg-emerald-500/10';
-      case 'error':
-        return 'border-red-500/30 bg-red-500/10';
-      case 'warning':
-        return 'border-amber-500/30 bg-amber-500/10';
-      default:
-        return 'border-blue-500/30 bg-blue-500/10';
-    }
-  };
+function LoadingScreen() {
+  const [progress, setProgress] = useState(0);
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setProgress(prev => prev >= 90 ? prev : prev + 10);
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <div className="fixed bottom-24 right-4 z-[200] flex flex-col gap-2 max-w-sm pointer-events-none">
-      {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          onClick={() => onRemove(toast.id)}
-          className={`pointer-events-auto cursor-pointer p-4 rounded-xl border backdrop-blur-xl shadow-lg transform transition-all duration-300 animate-slide-in-right ${getToastStyles(toast.type)}`}
+    <div 
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ background: 'hsl(var(--bg-primary))' }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="text-center"
+      >
+        {/* Logo */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mb-6"
         >
-          <div className="font-medium text-sm text-foreground">{toast.title}</div>
-          {toast.message && (
-            <div className="text-xs text-foreground-secondary mt-1">{toast.message}</div>
-          )}
-        </div>
-      ))}
+          <div 
+            className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center font-bold text-2xl"
+            style={{ background: 'hsl(var(--accent))', color: 'white' }}
+          >
+            V
+          </div>
+        </motion.div>
+        
+        {/* Text */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+        >
+          <h2 className="text-lg font-semibold mb-1">Vortex Protocol</h2>
+          <p className="text-sm" style={{ color: 'hsl(var(--text-tertiary))' }}>
+            Loading...
+          </p>
+        </motion.div>
+        
+        {/* Progress */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="mt-6"
+        >
+          <div 
+            className="w-32 h-1 mx-auto rounded-full overflow-hidden"
+            style={{ background: 'hsl(var(--bg-tertiary))' }}
+          >
+            <motion.div
+              className="h-full rounded-full"
+              style={{ background: 'hsl(var(--accent))' }}
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ ease: 'easeOut' }}
+            />
+          </div>
+        </motion.div>
+      </motion.div>
     </div>
   );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// WALLET MODAL CONTEXT
-// ═══════════════════════════════════════════════════════════════════════════════
-
-interface WalletModalContextValue {
-  isOpen: boolean;
-  open: () => void;
-  close: () => void;
-}
-
-const WalletModalContext = createContext<WalletModalContextValue | null>(null);
-
-export function useWalletModal() {
-  const context = useContext(WalletModalContext);
-  if (!context) {
-    throw new Error('useWalletModal must be used within Providers');
-  }
-  return context;
-}
-
-function WalletModalProvider({ children }: { children: ReactNode }) {
-  const { isOpen, open, close } = useWalletConnectModal();
-
-  return (
-    <WalletModalContext.Provider value={{ isOpen, open, close }}>
-      {children}
-      <WalletConnectModal isOpen={isOpen} onClose={close} />
-    </WalletModalContext.Provider>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// QUERY CLIENT
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function makeQueryClient() {
-  return new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 60 * 1000, // 1 minute
-        gcTime: 5 * 60 * 1000, // 5 minutes
-        refetchOnWindowFocus: false,
-        retry: 2,
-        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
-      },
-      mutations: {
-        retry: 1,
-      },
-    },
-  });
-}
-
-let browserQueryClient: QueryClient | undefined = undefined;
-
-function getQueryClient() {
-  if (typeof window === 'undefined') {
-    // Server: always make a new query client
-    return makeQueryClient();
-  } else {
-    // Browser: make a new query client if we don't already have one
-    if (!browserQueryClient) browserQueryClient = makeQueryClient();
-    return browserQueryClient;
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN PROVIDERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function Providers({ children }: { children: ReactNode }) {
-  const queryClient = getQueryClient();
-  const [isHydrated, setIsHydrated] = useState(false);
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 1000 * 60 * 5, // 5 minutes
+        gcTime: 1000 * 60 * 30, // 30 minutes
+        retry: 2,
+        refetchOnWindowFocus: false,
+      },
+    },
+  }));
 
-  // Mark as hydrated after first render
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
-    setIsHydrated(true);
+    // Small delay for smoother transition
+    const timer = setTimeout(() => setMounted(true), 150);
+    return () => clearTimeout(timer);
   }, []);
 
-  // Always render children, use CSS to hide during hydration if needed
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
-          <WalletModalProvider>
-            <div 
-              className={isHydrated ? '' : 'opacity-0'}
-              style={{ transition: 'opacity 0.2s ease-in-out' }}
-            >
-              {children}
-            </div>
-            {!isHydrated && <HydrationLoader />}
-          </WalletModalProvider>
+          <AnimatePresence mode="wait">
+            {mounted ? (
+              <motion.div
+                key="content"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2 }}
+              >
+                {children}
+              </motion.div>
+            ) : (
+              <LoadingScreen key="loading" />
+            )}
+          </AnimatePresence>
         </ToastProvider>
       </QueryClientProvider>
     </WagmiProvider>
-  );
-}
-
-// Simple hydration loader that fades out
-function HydrationLoader() {
-  return (
-    <div className="fixed inset-0 bg-background flex items-center justify-center z-[9999] animate-fade-out pointer-events-none">
-      <div className="text-center">
-        <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center animate-pulse">
-          <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M2 17l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-        <p className="text-sm text-foreground-muted">Loading Vortex...</p>
-      </div>
-    </div>
   );
 }
