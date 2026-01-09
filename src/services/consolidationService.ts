@@ -98,14 +98,20 @@ export async function createConsolidationPlan(
       continue;
     }
 
-    // Skip native tokens (keep some ETH for gas)
+    // For native tokens: only skip on Base (need gas), allow on other chains
     if (token.address === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE') {
-      plan.tokens.push({ token, risk, action: 'skip', reason: 'Native token (keep for gas)' });
-      continue;
+      if (token.chainId === 8453) {
+        // Base native ETH - skip (need for gas)
+        plan.tokens.push({ token, risk, action: 'skip', reason: 'Base ETH needed for gas' });
+        continue;
+      }
+      // Other chain native tokens (ETH on Ethereum, MATIC on Polygon, etc.) - can swap
+      // Will use Relay bridge for cross-chain
+      logger.info({ token: token.symbol, chainId: token.chainId }, 'Native token on non-Base chain - will bridge');
     }
 
-    // Skip if value too low (not worth gas)
-    if (token.valueUsd < 0.5) {
+    // Skip if value too low (not worth gas) - lowered threshold
+    if (token.valueUsd < 0.1) {
       plan.tokens.push({ token, risk, action: 'skip', reason: 'Value too low for gas cost' });
       continue;
     }

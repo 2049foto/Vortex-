@@ -121,7 +121,15 @@ export default function ConsolidateClient() {
       const planData = await planResponse.json();
       
       if (!planData.success) {
-        throw new Error(planData.error || planData.message || 'Failed to create consolidation plan');
+        // Show specific error message
+        const errorMsg = planData.message || planData.error || 'Failed to create consolidation plan';
+        const skippedTokens = planData.data?.skippedTokens;
+        
+        if (skippedTokens && skippedTokens.length > 0) {
+          const reasons = skippedTokens.map((t: any) => `${t.symbol}: ${t.reason}`).join(', ');
+          throw new Error(`${errorMsg}. Tokens skipped: ${reasons}`);
+        }
+        throw new Error(errorMsg);
       }
 
       setProgress(30);

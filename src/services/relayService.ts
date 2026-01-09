@@ -54,9 +54,16 @@ export async function getRelayQuote(params: {
   tradeType?: 'EXACT_INPUT' | 'EXACT_OUTPUT';
 }): Promise<RelayQuote> {
   try {
-    logger.info({ params }, 'Getting Relay quote');
+    logger.info({ 
+      user: params.user.slice(0, 10),
+      originChainId: params.originChainId,
+      destinationChainId: params.destinationChainId,
+      originCurrency: params.originCurrency.slice(0, 10),
+      destinationCurrency: params.destinationCurrency.slice(0, 10),
+      amount: params.amount.slice(0, 20),
+    }, 'Getting Relay quote');
 
-    const response = await fetch(`${RELAY_API_BASE}/quote/v2`, {
+    const response = await fetch(`${RELAY_API_BASE}/quote`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -70,25 +77,43 @@ export async function getRelayQuote(params: {
         amount: params.amount,
         tradeType: params.tradeType || 'EXACT_INPUT',
       }),
+      signal: AbortSignal.timeout(10000), // 10 second timeout
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Relay API error: ${response.status} - ${errorText}`);
+      logger.error({ status: response.status, errorText }, 'Relay API error response');
+      throw new Error(`Relay API error: ${response.status} - ${errorText.slice(0, 200)}`);
     }
 
     const data = await response.json();
     
-    logger.info({ requestId: data.requestId, stepsCount: data.steps?.length }, 'Relay quote received');
+    logger.info({ 
+      requestId: data.requestId, 
+      stepsCount: data.steps?.length,
+      hasOutput: !!data.details?.currencyOut?.amountFormatted
+    }, 'Relay quote received');
+
+    // Extract estimated output from response
+    const estimatedOutput = data.details?.currencyOut?.amountFormatted || 
+                          data.details?.currencyOut?.amount || 
+                          '0';
 
     return {
-      requestId: data.requestId,
+      requestId: data.requestId || crypto.randomUUID(),
       steps: data.steps || [],
-      estimatedOutput: data.estimatedOutput,
-      fees: data.fees,
+      estimatedOutput,
+      fees: {
+        relayFee: data.fees?.relayer?.amountFormatted || '0',
+        gasFee: data.fees?.gas?.amountFormatted || '0',
+      },
     };
   } catch (error) {
-    logger.error({ error, params }, 'Failed to get Relay quote');
+    if (error instanceof Error && error.name === 'AbortError') {
+      logger.error({ params: params.originChainId }, 'Relay API timeout');
+      throw new Error('Relay API timeout');
+    }
+    logger.error({ error, originChain: params.originChainId }, 'Failed to get Relay quote');
     throw error;
   }
 }
@@ -180,9 +205,19 @@ export async function executeRelayBridge(
  * Native tokens use zero address
  */
 export function toRelayCurrency(tokenAddress: string | null): string {
-  if (!tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000') {
+  if (!tokenAddress) {
     return '0x0000000000000000000000000000000000000000';
   }
+  
+  // Native token sentinel → zero address for Relay
+  if (tokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
+    return '0x0000000000000000000000000000000000000000';
+  }
+  
+  if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+    return '0x0000000000000000000000000000000000000000';
+  }
+  
   return tokenAddress;
 }
 

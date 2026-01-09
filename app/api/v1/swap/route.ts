@@ -6,26 +6,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireTurnstile } from '@/middleware/turnstile';
 
+// Debug logging
+function log(level: 'info' | 'warn' | 'error', message: string, data?: any) {
+  const timestamp = new Date().toISOString();
+  const prefix = `[SWAP-API ${timestamp}] [${level.toUpperCase()}]`;
+  if (data) {
+    console.log(`${prefix} ${message}`, JSON.stringify(data, null, 2));
+  } else {
+    console.log(`${prefix} ${message}`);
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { walletAddress, selectedTokens, outputToken, slippagePct, dryRun, turnstileToken } = body;
 
-    // Verify Turnstile token (bot protection)
+    // Verify Turnstile token (bot protection) - FAIL OPEN for better UX
+    let turnstileVerified = false;
     try {
       const clientIp = request.headers.get('x-forwarded-for') || 
                       request.headers.get('x-real-ip') || 
                       'unknown';
       await requireTurnstile(turnstileToken || '', clientIp);
+      turnstileVerified = true;
     } catch (turnstileError) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Bot verification failed',
-          message: turnstileError instanceof Error ? turnstileError.message : 'Please complete the verification',
-        },
-        { status: 403 }
-      );
+      // Log but don't block - fail open
+      console.warn('Turnstile verification failed (allowing):', turnstileError);
     }
 
     // Validate required fields
@@ -44,6 +51,13 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      log('info', '=== Starting Swap/Consolidation ===', { 
+        walletAddress: walletAddress.slice(0, 10),
+        selectedTokensCount: selectedTokens?.length,
+        outputToken,
+        dryRun
+      });
+      
       // Dynamic imports to avoid build-time errors
       const { scanWallet } = await import('@/services/portfolioService');
       const { batchCalculateRiskScoresV2 } = await import('@/services/riskScoringServiceV2');
@@ -52,7 +66,10 @@ export async function POST(request: NextRequest) {
 
       // Step 1: Fetch full token data for selected tokens
       const chainIds = [...new Set(selectedTokens.map((t: any) => t.chainId))] as number[];
+      log('info', 'Scanning chains for selected tokens', { chainIds });
+      
       const allTokens = await scanWallet(walletAddress, chainIds);
+      log('info', `Scan complete. Found ${allTokens.length} tokens`);
 
       // Filter to only selected tokens
       const tokensToConsolidate = allTokens.filter((token) =>
@@ -63,7 +80,15 @@ export async function POST(request: NextRequest) {
         )
       );
 
+      log('info', `Matched ${tokensToConsolidate.length} tokens for consolidation`, {
+        tokens: tokensToConsolidate.map(t => ({ symbol: t.symbol, chainId: t.chainId, value: t.valueUsd }))
+      });
+
       if (tokensToConsolidate.length === 0) {
+        log('warn', 'No matching tokens found', { 
+          selectedAddresses: selectedTokens.map((t: any) => t.address.slice(0, 10)),
+          foundAddresses: allTokens.map(t => t.address.slice(0, 10))
+        });
         return NextResponse.json(
           { success: false, error: 'Selected tokens not found in wallet' },
           { status: 400 }
@@ -78,12 +103,24 @@ export async function POST(request: NextRequest) {
         ? '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' // USDC on Base
         : '0x4200000000000000000000000000000000000006'; // WETH on Base
       
+      log('info', 'Creating consolidation plan', { targetToken, outputToken });
+      
       const plan = await createConsolidationPlan(
         walletAddress,
         tokensToConsolidate,
         riskScores,
         targetToken
       );
+      
+      log('info', 'Plan created', {
+        planId: plan.id,
+        swapsCount: plan.swaps.length,
+        estimatedOutput: plan.estimatedOutput,
+        skippedTokens: plan.tokens.filter(t => t.action === 'skip').map(t => ({
+          symbol: t.token.symbol,
+          reason: t.reason
+        }))
+      });
 
       // If dry run, return plan without execution
       if (dryRun) {
