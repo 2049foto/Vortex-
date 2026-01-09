@@ -191,6 +191,17 @@ export function toRelayCurrency(tokenAddress: string | null): string {
  */
 export function isRelaySupported(originChainId: number, destinationChainId: number): boolean {
   // Relay supports most major EVM chains
-  const supportedChains = [1, 8453, 42161, 10, 137, 56, 43114, 324];
+  // Note: Monad (838592) is experimental - may not work yet
+  const supportedChains = [
+    1,      // Ethereum
+    8453,   // Base
+    42161,  // Arbitrum
+    10,     // Optimism
+    137,    // Polygon
+    56,     // BNB Chain
+    43114,  // Avalanche
+    324,    // zkSync Era
+    // 838592, // Monad - disabled until Relay confirms support
+  ];
   return supportedChains.includes(originChainId) && supportedChains.includes(destinationChainId);
 }

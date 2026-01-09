@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Premium Portfolio Hygiene Engine - Gasless consolidator optimized for Base",
   "private": true,
+  "packageManager": "bun@1.3.5",
   "scripts": {
     "dev": "next dev",
     "dev:api": "bun src/index.ts",
@@ -70,7 +71,7 @@
     "concurrently": "^8.0.0"
   },
   "engines": {
-    "node": ">=20.0.0",
-    "bun": ">=1.0.0"
+    "node": "20.x || 22.x",
+    "bun": ">=1.3.0"
   }
 }

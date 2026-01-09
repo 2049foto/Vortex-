@@ -120,51 +120,77 @@ export async function createConsolidationPlan(
   
   for (const { token } of swapTokens) {
     try {
-      // If token is on different chain, use Relay.link to bridge
-      if (token.chainId !== OUTPUT_CHAIN_ID) {
-        // Check if Relay supports this chain pair
-        if (isRelaySupported(token.chainId, OUTPUT_CHAIN_ID)) {
-          try {
-            // Use Relay.link for cross-chain bridge
-            const relayQuote = await getRelayQuote({
-              user: walletAddress,
-              originChainId: token.chainId,
-              destinationChainId: OUTPUT_CHAIN_ID,
-              originCurrency: toRelayCurrency(token.address),
-              destinationCurrency: toRelayCurrency(targetToken),
-              amount: token.balance,
-              tradeType: 'EXACT_INPUT',
-            });
-
-            if (relayQuote.steps && relayQuote.steps.length > 0) {
-              // Add bridge step to plan
-              plan.swaps.push({
-                router: 'relay',
-                fromToken: token,
-                toToken: targetToken,
-                amountIn: token.balance,
-                expectedOut: relayQuote.estimatedOutput || '0',
-                estimatedGas: '0', // Gas sponsored by Relay
-                priceImpact: 0,
-                tx: relayQuote.steps[0]?.items[0]?.data ? {
-                  to: relayQuote.steps[0].items[0].data.to,
-                  data: relayQuote.steps[0].items[0].data.data,
-                  value: relayQuote.steps[0].items[0].data.value,
-                } : undefined,
-              });
-
-              logger.info(
-                { token: token.symbol, requestId: relayQuote.requestId },
-                'Relay bridge quote obtained'
-              );
-              continue; // Skip swap route finding, Relay handles it
-            }
-          } catch (relayError) {
-            logger.warn({ error: relayError, token: token.symbol }, 'Relay bridge failed, trying fallback');
+      // Same-chain swap (token already on Base)
+      if (token.chainId === OUTPUT_CHAIN_ID) {
+        const route = await findBestRoute(token, targetToken, walletAddress);
+        if (route) {
+          plan.swaps.push(route);
+          plan.estimatedOutput = (
+            parseFloat(plan.estimatedOutput) + parseFloat(route.expectedOut)
+          ).toString();
+          plan.estimatedGasSaved = (
+            parseFloat(plan.estimatedGasSaved) + parseFloat(route.estimatedGas)
+          ).toString();
+        } else {
+          // Mark as skipped if no route found
+          const tokenEntry = plan.tokens.find(t => t.token.address === token.address);
+          if (tokenEntry) {
+            tokenEntry.action = 'skip';
+            tokenEntry.reason = 'No swap route available';
           }
         }
+        continue;
+      }
 
-        // Fallback to old bridge service
+      // Cross-chain: Token on different chain, need bridge
+      // Check if Relay supports this chain pair
+      if (isRelaySupported(token.chainId, OUTPUT_CHAIN_ID)) {
+        try {
+          // Use Relay.link for cross-chain bridge
+          const relayQuote = await getRelayQuote({
+            user: walletAddress,
+            originChainId: token.chainId,
+            destinationChainId: OUTPUT_CHAIN_ID,
+            originCurrency: toRelayCurrency(token.address),
+            destinationCurrency: toRelayCurrency(targetToken),
+            amount: token.balance,
+            tradeType: 'EXACT_INPUT',
+          });
+
+          if (relayQuote.steps && relayQuote.steps.length > 0) {
+            // Add bridge step to plan (client-side execution)
+            plan.swaps.push({
+              router: 'relay',
+              fromToken: token,
+              toToken: targetToken,
+              amountIn: token.balance,
+              expectedOut: relayQuote.estimatedOutput || '0',
+              estimatedGas: '0', // Gas included in Relay fee
+              priceImpact: 0,
+              tx: relayQuote.steps[0]?.items[0]?.data ? {
+                to: relayQuote.steps[0].items[0].data.to,
+                data: relayQuote.steps[0].items[0].data.data,
+                value: relayQuote.steps[0].items[0].data.value,
+              } : undefined,
+            });
+
+            plan.estimatedOutput = (
+              parseFloat(plan.estimatedOutput) + parseFloat(relayQuote.estimatedOutput || '0')
+            ).toString();
+
+            logger.info(
+              { token: token.symbol, requestId: relayQuote.requestId },
+              'Relay bridge quote obtained'
+            );
+            continue;
+          }
+        } catch (relayError) {
+          logger.warn({ error: relayError, token: token.symbol }, 'Relay bridge failed');
+        }
+      }
+
+      // Relay not supported or failed - try fallback bridge service
+      try {
         const bridgeQuotes = await getBridgeQuotes(
           token.chainId,
           OUTPUT_CHAIN_ID,
@@ -178,32 +204,34 @@ export async function createConsolidationPlan(
         if (bridgeDecision.shouldBridge && bridgeDecision.selectedBridge) {
           logger.info(
             { token: token.symbol, bridge: bridgeDecision.selectedBridge.bridge },
-            'Will bridge token to Base before swapping'
+            'Will bridge token to Base'
           );
-        } else {
-          logger.info(
-            { token: token.symbol, reason: bridgeDecision.reason },
-            'Skipping bridge (not economical)'
-          );
-          plan.tokens.find(t => t.token.address === token.address)!.action = 'skip';
-          plan.tokens.find(t => t.token.address === token.address)!.reason = bridgeDecision.reason;
+          // Add bridge to swaps (future: implement bridge execution)
           continue;
         }
+      } catch (bridgeError) {
+        logger.warn({ error: bridgeError, token: token.symbol }, 'Bridge service failed');
       }
-      
-      // Find best swap route
-      const route = await findBestRoute(token, targetToken, walletAddress);
-      if (route) {
-        plan.swaps.push(route);
-        plan.estimatedOutput = (
-          parseFloat(plan.estimatedOutput) + parseFloat(route.expectedOut)
-        ).toString();
-        plan.estimatedGasSaved = (
-          parseFloat(plan.estimatedGasSaved) + parseFloat(route.estimatedGas)
-        ).toString();
+
+      // All bridge options failed - skip with clear reason
+      const tokenEntry = plan.tokens.find(t => t.token.address === token.address);
+      if (tokenEntry) {
+        tokenEntry.action = 'skip';
+        tokenEntry.reason = `Cross-chain bridge not available (${token.chainId} → ${OUTPUT_CHAIN_ID})`;
       }
+      logger.info(
+        { token: token.symbol, fromChain: token.chainId },
+        'Skipping cross-chain token - no bridge available'
+      );
+
     } catch (error) {
       logger.error({ error, token: token.address }, 'Failed to find route');
+      // Mark token as skipped on error
+      const tokenEntry = plan.tokens.find(t => t.token.address === token.address);
+      if (tokenEntry) {
+        tokenEntry.action = 'skip';
+        tokenEntry.reason = 'Route finding failed';
+      }
     }
   }
 
@@ -428,11 +456,10 @@ async function executeSwap(swap: SwapRoute, walletAddress: string): Promise<stri
     'Executing swap'
   );
 
-  // If this is a Relay bridge (has tx data from Relay quote)
-  if (swap.router === 'relay' && swap.tx) {
-    // Relay bridge execution is handled client-side via wallet
-    // Return a placeholder - actual execution happens in client
-    throw new Error('Relay bridge must be executed client-side via wallet');
+  // Relay bridges must be executed client-side - skip server execution
+  if (swap.router === 'relay') {
+    logger.info({ token: swap.fromToken.symbol }, 'Relay bridge - client-side execution required');
+    return ''; // Return empty, actual execution happens client-side
   }
 
   // Get swap transaction

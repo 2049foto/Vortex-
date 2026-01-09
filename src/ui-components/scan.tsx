@@ -458,9 +458,22 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {tabs.map(tab => {
-            const isActive = activeTab === tab.key;
+            const isActiveTab = activeTab === tab.key;
+            const value = tabValues[tab.key];
+            const count = tabCounts[tab.key];
+            
+            // Format value intelligently for dust/micro
+            const formatValue = (v: number): string => {
+              if (v === 0) return '$0.00';
+              if (v < 0.0001) return `$${v.toExponential(2)}`;
+              if (v < 0.01) return `$${v.toFixed(4)}`;
+              if (v < 1) return `$${v.toFixed(3)}`;
+              if (v < 100) return `$${v.toFixed(2)}`;
+              return `$${v.toFixed(0)}`;
+            };
+            
             return (
               <motion.button
                 key={tab.key}
@@ -468,21 +481,32 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 className={cn(
-                  "p-3 rounded-2xl border-2 transition-all text-left",
-                  isActive 
-                    ? "border-indigo-500 bg-indigo-50 shadow-lg shadow-indigo-100" 
-                    : "border-slate-200 bg-white hover:border-slate-300"
+                  "p-4 rounded-2xl border-2 transition-all text-left",
+                  isActiveTab 
+                    ? "border-indigo-500 bg-gradient-to-br from-indigo-50 to-white shadow-lg shadow-indigo-100" 
+                    : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-md"
                 )}
               >
-                <div className={cn("flex items-center gap-2 mb-2", tab.color.split(' ')[0])}>
+                <div className={cn(
+                  "flex items-center gap-2 mb-3 px-2 py-1 rounded-lg w-fit",
+                  tab.color
+                )}>
                   {tab.icon}
-                  <span className="text-xs font-semibold uppercase">{tab.label}</span>
+                  <span className="text-xs font-bold uppercase tracking-wide">{tab.label}</span>
                 </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xl font-bold text-slate-900">{tabCounts[tab.key]}</span>
-                  <span className="text-xs text-slate-500">tokens</span>
+                <div className="flex items-baseline gap-2">
+                  <span className={cn(
+                    "text-2xl font-bold",
+                    isActiveTab ? "text-indigo-600" : "text-slate-900"
+                  )}>{count}</span>
+                  <span className="text-sm text-slate-400 font-medium">tokens</span>
                 </div>
-                <div className="text-sm text-slate-500">${tabValues[tab.key].toFixed(2)}</div>
+                <div className={cn(
+                  "text-sm font-semibold mt-1",
+                  value > 0 ? "text-slate-700" : "text-slate-400"
+                )}>
+                  {formatValue(value)}
+                </div>
               </motion.button>
             );
           })}
@@ -528,11 +552,11 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
                         onClick={() => handleToggleChain(chainId)}
                         disabled={!hasTokens}
                         className={cn(
-                          "flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all",
+                          "flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all",
                           !hasTokens && "opacity-30 cursor-not-allowed",
                           isSelected 
-                            ? `bg-gradient-to-r ${chain.gradient} text-white shadow-lg` 
-                            : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"
+                            ? "bg-slate-900 text-white shadow-lg" 
+                            : "bg-white border-2 border-slate-200 text-slate-700 hover:border-slate-400 hover:shadow-md"
                         )}
                       >
                         <img 
@@ -546,10 +570,10 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
                         <span>{chain.shortName}</span>
                         {tokenCount > 0 && (
                           <span className={cn(
-                            "px-2 py-0.5 rounded-full text-xs font-bold min-w-[20px] text-center",
+                            "px-2 py-0.5 rounded-full text-xs font-bold min-w-[22px] text-center",
                             isSelected 
-                              ? "bg-white/30 text-white shadow-sm" 
-                              : "bg-indigo-100 text-indigo-700"
+                              ? "bg-white text-slate-900" 
+                              : "bg-slate-900 text-white"
                           )}>
                             {tokenCount}
                           </span>
@@ -715,6 +739,39 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
 }
 
 // =============================================
+// HELPER FUNCTIONS
+// =============================================
+
+/**
+ * Format USD value intelligently for dust/micro dust
+ */
+function formatUSDValue(value: number): string {
+  if (value === 0) return '$0.00';
+  if (value < 0.0001) return `$${value.toExponential(1)}`;
+  if (value < 0.001) return `$${value.toFixed(5)}`;
+  if (value < 0.01) return `$${value.toFixed(4)}`;
+  if (value < 0.1) return `$${value.toFixed(3)}`;
+  if (value < 10) return `$${value.toFixed(2)}`;
+  if (value < 1000) return `$${value.toFixed(2)}`;
+  if (value < 10000) return `$${(value / 1000).toFixed(1)}K`;
+  return `$${(value / 1000).toFixed(0)}K`;
+}
+
+/**
+ * Format balance intelligently
+ */
+function formatBalance(balance: string): string {
+  const num = parseFloat(balance);
+  if (num === 0) return '0';
+  if (num < 0.0001) return num.toExponential(1);
+  if (num < 0.01) return num.toFixed(6);
+  if (num < 1) return num.toFixed(4);
+  if (num < 100) return num.toFixed(2);
+  if (num < 10000) return num.toFixed(0);
+  return `${(num / 1000).toFixed(1)}K`;
+}
+
+// =============================================
 // TOKEN CARD COMPONENT
 // =============================================
 function TokenCard({ 
@@ -850,14 +907,16 @@ function TokenCard({
         </button>
 
         {/* Value */}
-        <div className="text-right flex-shrink-0 min-w-[80px]">
+        <div className="text-right flex-shrink-0 min-w-[90px]">
           <div className={cn(
             "font-bold text-lg",
-            isRisk ? "text-red-600" : "text-slate-900"
+            isRisk ? "text-red-600" : asset.valueUSD < 1 ? "text-amber-600" : "text-slate-900"
           )}>
-            ${asset.valueUSD.toFixed(2)}
+            {formatUSDValue(asset.valueUSD)}
           </div>
-          <div className="text-xs text-slate-500">{parseFloat(asset.balance).toFixed(4)} {asset.symbol}</div>
+          <div className="text-xs text-slate-500 truncate max-w-[90px]" title={`${asset.balance} ${asset.symbol}`}>
+            {formatBalance(asset.balance)} {asset.symbol}
+          </div>
         </div>
 
         {/* Expand button */}

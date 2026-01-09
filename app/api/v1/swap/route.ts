@@ -119,8 +119,23 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // Check if we have any swaps to execute
+      if (plan.swaps.length === 0) {
+        return NextResponse.json({
+          success: false,
+          error: 'No viable swap routes found',
+          message: 'All selected tokens were skipped due to cross-chain bridging limitations or insufficient liquidity',
+          data: {
+            skippedTokens: plan.tokens.filter(t => t.action === 'skip').map(t => ({
+              symbol: t.token.symbol,
+              chainId: t.token.chainId,
+              reason: t.reason,
+            })),
+          },
+        }, { status: 400 });
+      }
+
       // Step 4: For Relay bridges, return plan for client-side execution
-      // For same-chain swaps, execute server-side
       const hasRelayBridges = plan.swaps.some(s => s.router === 'relay');
       
       if (hasRelayBridges) {
@@ -130,6 +145,7 @@ export async function POST(request: NextRequest) {
           data: {
             requestId: plan.id,
             status: 'pending_client_execution',
+            requiresClientExecution: true,
             plan: {
               swapCount: plan.swaps.length,
               estimatedOutput: plan.estimatedOutput,
@@ -137,20 +153,20 @@ export async function POST(request: NextRequest) {
               swaps: plan.swaps.map((s) => ({
                 router: s.router,
                 fromToken: s.fromToken.symbol,
+                fromTokenAddress: s.fromToken.address,
+                fromChainId: s.fromToken.chainId,
                 toToken: outputToken || 'ETH',
                 expectedOut: s.expectedOut,
                 priceImpact: s.priceImpact,
-                tx: s.tx, // Relay tx data for client
-                fromTokenAddress: s.fromToken.address,
-                fromChainId: s.fromToken.chainId,
+                tx: s.tx, // Relay tx data for client execution
               })),
             },
-            message: 'Please execute transactions using your wallet',
+            message: 'Cross-chain swap requires wallet signature. Please approve transactions.',
           },
         });
       }
 
-      // Step 4: Execute consolidation (real mainnet execution for same-chain swaps)
+      // Step 5: Execute same-chain swaps server-side
       const result = await executeConsolidation(plan.id, walletAddress, plan);
 
       // Step 5: Send notification on completion
