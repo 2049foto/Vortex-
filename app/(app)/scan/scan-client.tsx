@@ -83,6 +83,25 @@ const TIERS = {
   RISK: { label: 'Risk', color: 'danger', description: 'Potential security risk' },
 };
 
+// Output tokens on Base - should be excluded from selection
+const BASE_OUTPUT_TOKENS = {
+  ETH: [
+    '0x4200000000000000000000000000000000000006', // WETH on Base
+    '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', // Native ETH sentinel
+  ],
+  USDC: [
+    '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // USDC on Base
+  ],
+};
+
+// Check if token is an output token on Base
+function isBaseOutputToken(token: Token): boolean {
+  if (token.chainId !== 8453) return false; // Only check Base tokens
+  const address = token.address.toLowerCase();
+  const allOutputAddresses = [...BASE_OUTPUT_TOKENS.ETH, ...BASE_OUTPUT_TOKENS.USDC];
+  return allOutputAddresses.includes(address);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // API INTEGRATION
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -255,19 +274,25 @@ function TokenCard({
 }) {
   const tierConfig = TIERS[token.tier];
   const chainConfig = CHAINS[token.chainId];
+  const isOutputToken = isBaseOutputToken(token);
   
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.02 }}
-      className={`token-card ${selected ? 'selected' : ''}`}
-      onClick={onToggle}
+      className={`token-card ${selected ? 'selected' : ''} ${isOutputToken ? 'opacity-60' : ''}`}
+      onClick={() => {
+        if (isOutputToken) return; // Prevent clicking output tokens
+        onToggle();
+      }}
+      style={isOutputToken ? { cursor: 'not-allowed' } : undefined}
     >
       <input
         type="checkbox"
         className="checkbox"
         checked={selected}
+        disabled={isOutputToken}
         onChange={() => {}}
       />
       
@@ -293,6 +318,19 @@ function TokenCard({
           >
             {tierConfig.label}
           </span>
+          {isOutputToken && (
+            <span 
+              className="badge" 
+              style={{ 
+                height: 20, 
+                fontSize: 10, 
+                background: 'hsl(var(--accent-light))', 
+                color: 'hsl(var(--accent))' 
+              }}
+            >
+              Output
+            </span>
+          )}
         </div>
         <div className="token-value flex items-center gap-1.5">
           <span 
@@ -513,9 +551,11 @@ export default function ScanClient() {
         result.scanTime = Date.now() - startTime;
         setScanResult(result);
         
-        // Auto-select consolidatable tokens (DUST + MICRODUST, not RISK)
+        // Auto-select consolidatable tokens (DUST + MICRODUST, not RISK, not output tokens on Base)
         const consolidatable = result.tokens.filter(
-          t => (t.tier === 'DUST' || t.tier === 'MICRODUST') && t.riskScore < 70
+          t => (t.tier === 'DUST' || t.tier === 'MICRODUST') && 
+               t.riskScore < 70 && 
+               !isBaseOutputToken(t) // Exclude ETH/USDC on Base as they are output targets
         );
         setSelectedTokens(new Set(consolidatable.map(t => t.id)));
         
@@ -573,7 +613,9 @@ export default function ScanClient() {
   const selectAllDust = () => {
     if (!scanResult) return;
     const dustIds = scanResult.tokens
-      .filter(t => (t.tier === 'DUST' || t.tier === 'MICRODUST') && t.riskScore < 70)
+      .filter(t => (t.tier === 'DUST' || t.tier === 'MICRODUST') && 
+                   t.riskScore < 70 &&
+                   !isBaseOutputToken(t)) // Exclude output tokens on Base
       .map(t => t.id);
     setSelectedTokens(new Set(dustIds));
   };

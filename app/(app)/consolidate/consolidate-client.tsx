@@ -71,6 +71,29 @@ const CHAIN_NAMES: Record<number, string> = {
   324: 'zkSync',
 };
 
+// Output token addresses on Base - filter these from consolidation based on selected output
+const BASE_OUTPUT_ADDRESSES: Record<string, string[]> = {
+  ETH: [
+    '0x4200000000000000000000000000000000000006', // WETH on Base
+    '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', // Native ETH sentinel
+  ],
+  USDC: [
+    '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // USDC on Base
+  ],
+};
+
+// Filter tokens to remove output tokens on Base
+function filterOutputTokens(tokens: SelectedToken[], outputToken: string): SelectedToken[] {
+  const addressesToExclude = BASE_OUTPUT_ADDRESSES[outputToken] || [];
+  return tokens.filter(token => {
+    // Only filter Base tokens (chainId 8453)
+    if (token.chainId !== 8453) return true;
+    // Check if this token matches output
+    const address = (token.address || '').toLowerCase();
+    return !addressesToExclude.includes(address);
+  });
+}
+
 type Step = 'review' | 'configure' | 'confirm' | 'processing' | 'success' | 'error';
 
 export default function ConsolidateClient() {
@@ -113,16 +136,24 @@ export default function ConsolidateClient() {
     }
   }, [router]);
 
-  // Calculate totals
+  // Filter out tokens that match the output token on Base
+  const tokensToConsolidate = useMemo(() => {
+    if (!data?.tokens) return [];
+    return filterOutputTokens(data.tokens, outputToken);
+  }, [data?.tokens, outputToken]);
+
+  // Calculate totals based on filtered tokens
   const totals = useMemo(() => {
-    if (!data?.tokens) return { value: 0, tokens: 0, chains: 0 };
-    const chains = new Set(data.tokens.map(t => t.chainId));
+    if (tokensToConsolidate.length === 0) return { value: 0, tokens: 0, chains: 0, excludedCount: 0 };
+    const chains = new Set(tokensToConsolidate.map(t => t.chainId));
+    const excludedCount = (data?.tokens?.length || 0) - tokensToConsolidate.length;
     return {
-      value: data.tokens.reduce((sum, t) => sum + t.balanceUsd, 0),
-      tokens: data.tokens.length,
+      value: tokensToConsolidate.reduce((sum, t) => sum + t.balanceUsd, 0),
+      tokens: tokensToConsolidate.length,
       chains: chains.size,
+      excludedCount,
     };
-  }, [data]);
+  }, [tokensToConsolidate, data?.tokens?.length]);
 
   // Estimate output (simplified)
   const estimatedOutput = useMemo(() => {
@@ -208,6 +239,13 @@ export default function ConsolidateClient() {
   const handleConsolidate = async () => {
     if (!data || !isConnected || !address) return;
     
+    // Check if there are tokens to consolidate
+    if (tokensToConsolidate.length === 0) {
+      setError('No tokens to consolidate. All selected tokens are output tokens.');
+      setStep('error');
+      return;
+    }
+    
     setStep('processing');
     setProgress(0);
     setError(null);
@@ -225,7 +263,8 @@ export default function ConsolidateClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           walletAddress: address,
-          selectedTokens: data.tokens.map(t => ({
+          // Use filtered tokens (excludes output token on Base)
+          selectedTokens: tokensToConsolidate.map(t => ({
             chainId: t.chainId,
             address: t.address || t.id?.split('-')[1],
           })),
@@ -539,6 +578,11 @@ export default function ConsolidateClient() {
             <p className="text-sm" style={{ color: 'hsl(var(--text-tertiary))' }}>
               from {totals.chains} chain{totals.chains > 1 ? 's' : ''}
             </p>
+            {totals.excludedCount > 0 && (
+              <p className="text-xs mt-1" style={{ color: 'hsl(var(--warning))' }}>
+                {totals.excludedCount} {outputToken} token{totals.excludedCount > 1 ? 's' : ''} on Base excluded
+              </p>
+            )}
           </div>
           
           <div className="flex items-center justify-center gap-2 py-4">
