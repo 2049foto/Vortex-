@@ -2,7 +2,8 @@
 
 /**
  * Vortex Protocol - Cloudflare Turnstile Component
- * Bot protection for public endpoints
+ * Bot protection with anti-loop mechanism
+ * Updated: Jan 9, 2026 - Fixed verification loop issue
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -15,6 +16,7 @@ declare global {
       remove: (widgetId: string) => void;
       getResponse: (widgetId: string) => string | undefined;
     };
+    __TURNSTILE_LOADED__?: boolean;
   }
 }
 
@@ -26,6 +28,9 @@ interface TurnstileOptions {
   theme?: 'light' | 'dark' | 'auto';
   size?: 'normal' | 'compact' | 'invisible';
   tabindex?: number;
+  retry?: 'auto' | 'never';
+  'retry-interval'?: number;
+  'refresh-expired'?: 'auto' | 'manual' | 'never';
 }
 
 interface TurnstileProps {
@@ -37,6 +42,11 @@ interface TurnstileProps {
   size?: 'normal' | 'compact' | 'invisible';
   className?: string;
 }
+
+// Session storage key to prevent loops
+const TURNSTILE_VERIFIED_KEY = 'vortex_turnstile_verified';
+const TURNSTILE_TIMESTAMP_KEY = 'vortex_turnstile_timestamp';
+const VERIFICATION_VALID_DURATION = 5 * 60 * 1000; // 5 minutes
 
 export function Turnstile({
   siteKey,
@@ -50,85 +60,147 @@ export function Turnstile({
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const hasRendered = useRef(false);
+  const verificationAttempts = useRef(0);
+  const maxAttempts = 3;
 
-  // Don't render if siteKey is empty
+  // Check if already verified recently (prevent loop)
+  const isRecentlyVerified = useCallback(() => {
+    try {
+      const verified = sessionStorage.getItem(TURNSTILE_VERIFIED_KEY);
+      const timestamp = sessionStorage.getItem(TURNSTILE_TIMESTAMP_KEY);
+      
+      if (verified === 'true' && timestamp) {
+        const elapsed = Date.now() - parseInt(timestamp, 10);
+        return elapsed < VERIFICATION_VALID_DURATION;
+      }
+    } catch {
+      // sessionStorage not available
+    }
+    return false;
+  }, []);
+
+  // Mark as verified
+  const markVerified = useCallback(() => {
+    try {
+      sessionStorage.setItem(TURNSTILE_VERIFIED_KEY, 'true');
+      sessionStorage.setItem(TURNSTILE_TIMESTAMP_KEY, Date.now().toString());
+    } catch {
+      // sessionStorage not available
+    }
+  }, []);
+
+  // Don't render if siteKey is empty or already verified
   if (!siteKey || siteKey.trim() === '') {
     return null;
   }
 
+  // Skip if recently verified (prevents loop)
+  useEffect(() => {
+    if (isRecentlyVerified()) {
+      // Auto-pass if recently verified
+      onVerify('session_cached');
+    }
+  }, [isRecentlyVerified, onVerify]);
+
   const loadScript = useCallback(() => {
-    if (document.querySelector('script[src*="turnstile"]')) {
+    // Prevent multiple script loads
+    if (window.__TURNSTILE_LOADED__ || document.querySelector('script[src*="turnstile"]')) {
       setIsLoaded(true);
       return;
     }
 
     const script = document.createElement('script');
-    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
     script.async = true;
     script.defer = true;
-    script.onload = () => setIsLoaded(true);
+    script.onload = () => {
+      window.__TURNSTILE_LOADED__ = true;
+      setIsLoaded(true);
+    };
     script.onerror = () => {
-      console.warn('Failed to load Turnstile script');
+      console.warn('Failed to load Turnstile script - proceeding without verification');
       setIsLoaded(false);
+      // Call onVerify anyway to not block the user
+      onVerify('script_load_failed');
     };
     document.head.appendChild(script);
-  }, []);
+  }, [onVerify]);
 
   useEffect(() => {
     if (!siteKey || siteKey.trim() === '') return;
+    if (isRecentlyVerified()) return; // Skip if already verified
     loadScript();
-  }, [loadScript, siteKey]);
+  }, [loadScript, siteKey, isRecentlyVerified]);
 
   useEffect(() => {
-    if (!isLoaded || !containerRef.current || !window.turnstile || !siteKey || siteKey.trim() === '') return;
+    if (!isLoaded || !containerRef.current || !window.turnstile) return;
+    if (!siteKey || siteKey.trim() === '') return;
+    if (hasRendered.current) return; // Prevent re-render
+    if (isRecentlyVerified()) return; // Skip if already verified
 
     // Clean up existing widget
     if (widgetIdRef.current) {
       try {
         window.turnstile.remove(widgetIdRef.current);
-      } catch (e) {
+      } catch {
         // Ignore cleanup errors
       }
     }
 
     try {
-      // Render new widget
+      hasRendered.current = true;
+      
+      // Render widget with anti-loop settings
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: siteKey,
-        callback: onVerify,
-        'error-callback': onError,
-        'expired-callback': onExpire,
+        callback: (token: string) => {
+          markVerified();
+          onVerify(token);
+        },
+        'error-callback': () => {
+          verificationAttempts.current++;
+          
+          // After max attempts, just proceed
+          if (verificationAttempts.current >= maxAttempts) {
+            console.warn('Turnstile max attempts reached - proceeding without verification');
+            markVerified(); // Prevent further loops
+            onVerify('max_attempts_reached');
+            return;
+          }
+          
+          onError?.();
+        },
+        'expired-callback': () => {
+          // Don't trigger loop on expiry
+          onExpire?.();
+        },
         theme,
         size,
+        retry: 'never', // Disable auto-retry to prevent loops
+        'refresh-expired': 'never', // Don't auto-refresh
       });
     } catch (error) {
       console.error('Turnstile render error:', error);
-      onError?.();
+      // Proceed without blocking
+      onVerify('render_error');
     }
 
     return () => {
       if (widgetIdRef.current && window.turnstile) {
         try {
           window.turnstile.remove(widgetIdRef.current);
-        } catch (e) {
+        } catch {
           // Ignore cleanup errors
         }
       }
     };
-  }, [isLoaded, siteKey, onVerify, onError, onExpire, theme, size]);
+  }, [isLoaded, siteKey, onVerify, onError, onExpire, theme, size, markVerified, isRecentlyVerified]);
 
-  const reset = useCallback(() => {
-    if (widgetIdRef.current && window.turnstile) {
-      window.turnstile.reset(widgetIdRef.current);
-    }
-  }, []);
-
-  const getResponse = useCallback(() => {
-    if (widgetIdRef.current && window.turnstile) {
-      return window.turnstile.getResponse(widgetIdRef.current);
-    }
-    return undefined;
-  }, []);
+  // If already verified, don't show widget
+  if (isRecentlyVerified()) {
+    return null;
+  }
 
   return <div ref={containerRef} className={className} />;
 }

@@ -211,27 +211,30 @@ export function Consolidate({ address, tokens = [], isExecuting, executionStep, 
           animate={{ opacity: 1, y: 0 }}
           className="text-center"
         >
-          <div className="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center mx-auto mb-6">
-            <Wallet className="w-10 h-10 text-slate-400" />
+          {/* Gradient border card */}
+          <div className="gradient-border rounded-3xl p-8">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center mx-auto mb-6 shadow-inner">
+              <Wallet className="w-10 h-10 text-slate-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">No Assets Selected</h2>
+            <p className="text-slate-500 mb-8 max-w-sm mx-auto">
+              Go back to scan and select assets to consolidate into ETH or USDC on Base.
+            </p>
+            <Button 
+              onClick={() => onNavigate?.('/scan')}
+              className="btn-3d h-12 px-6 rounded-xl bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 text-white"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Scan
+            </Button>
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">No Assets Selected</h2>
-          <p className="text-slate-500 mb-8 max-w-sm mx-auto">
-            Go back to scan and select assets to consolidate into ETH or USDC on Base.
-          </p>
-          <Button 
-            onClick={() => onNavigate?.('/scan')}
-            className="h-12 px-6 rounded-xl bg-slate-900 hover:bg-slate-800"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Scan
-          </Button>
         </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
+    <div className="max-w-2xl mx-auto px-4 py-6 mobile-bottom-safe">
       {/* Header */}
       {(phase === 'configure' || phase === 'review') && (
         <div className="mb-8">
@@ -285,32 +288,36 @@ export function Consolidate({ address, tokens = [], isExecuting, executionStep, 
             exit={{ opacity: 0, y: -20 }}
             className="space-y-6"
           >
-            {/* Selected Assets Preview */}
-            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm">
+            {/* Selected Assets Preview - Smart Card */}
+            <div className="smart-card rounded-2xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-slate-900">Selected Assets</h3>
-                <span className="text-sm text-slate-500">{tokens.length} tokens</span>
+                <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-600 text-sm font-medium">
+                  {tokens.length} tokens
+                </span>
               </div>
               
               <div className="flex flex-wrap gap-2 mb-4">
                 {tokens.slice(0, 6).map(asset => (
-                  <div 
-                    key={asset.id} 
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100"
+                  <motion.div 
+                    key={asset.id}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200/50 cursor-default"
                   >
                     {asset.logoUrl ? (
-                      <img src={asset.logoUrl} alt={asset.symbol} className="w-4 h-4 rounded-full" />
+                      <img src={asset.logoUrl} alt={asset.symbol} className="w-5 h-5 rounded-full ring-2 ring-white" />
                     ) : (
-                      <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center text-[8px] text-white font-bold">
+                      <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-[9px] text-white font-bold shadow-sm">
                         {asset.symbol.slice(0, 1)}
                       </div>
                     )}
                     <span className="text-sm font-medium text-slate-700">{asset.symbol}</span>
-                    <span className="text-xs text-slate-500">${(asset.valueUSD || 0).toFixed(2)}</span>
-                  </div>
+                    <span className="text-xs text-slate-400">${(asset.valueUSD || 0).toFixed(2)}</span>
+                  </motion.div>
                 ))}
                 {tokens.length > 6 && (
-                  <div className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-sm text-slate-500">
+                  <div className="px-3 py-2 rounded-xl bg-slate-50 text-sm text-slate-500 border border-dashed border-slate-200">
                     +{tokens.length - 6} more
                   </div>
                 )}
@@ -506,8 +513,9 @@ export function Consolidate({ address, tokens = [], isExecuting, executionStep, 
               </Button>
               <Button
                 onClick={handleConfirmConsolidation}
-                className="flex-1 h-14 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold"
+                className="flex-1 h-14 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold btn-3d ripple mobile-touch-target"
               >
+                <Sparkles className="w-5 h-5 mr-2" />
                 Confirm & Execute
                 <ArrowRight className="w-5 h-5 ml-2" />
               </Button>

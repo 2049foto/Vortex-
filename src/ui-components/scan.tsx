@@ -710,8 +710,10 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
               <Button 
                 onClick={handleConsolidate}
                 disabled={selectedTokens.size === 0}
-                className="h-12 px-6 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold disabled:opacity-50 shadow-lg shadow-indigo-500/25"
+                variant="glow3d"
+                className="h-12 sm:h-14 px-6 sm:px-8 rounded-xl disabled:opacity-50 mobile-touch-target"
               >
+                <Sparkles className="w-4 h-4 mr-2" />
                 Consolidate
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>

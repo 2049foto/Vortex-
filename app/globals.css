@@ -360,3 +360,381 @@ button:not(.icon-btn) {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
+
+/* ============================================ */
+/* 2026 DESIGN TRENDS - Premium Light Mode */
+/* ============================================ */
+
+/* 2.5D Button with depth */
+.btn-3d {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 
+    0 4px 0 0 hsl(var(--primary) / 0.3),
+    0 6px 20px -4px hsl(var(--primary) / 0.25);
+}
+
+.btn-3d:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 6px 0 0 hsl(var(--primary) / 0.3),
+    0 10px 30px -4px hsl(var(--primary) / 0.3);
+}
+
+.btn-3d:active {
+  transform: translateY(2px);
+  box-shadow: 
+    0 2px 0 0 hsl(var(--primary) / 0.3),
+    0 4px 10px -4px hsl(var(--primary) / 0.2);
+}
+
+/* Gradient Border Effect */
+.gradient-border {
+  position: relative;
+  background: hsl(var(--card));
+  border-radius: var(--radius);
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(135deg, 
+    hsl(234 89% 64% / 0.5), 
+    hsl(280 89% 64% / 0.3),
+    hsl(234 89% 64% / 0.1),
+    hsl(234 89% 64% / 0.5)
+  );
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.gradient-border:hover::before {
+  background: linear-gradient(135deg, 
+    hsl(234 89% 64% / 0.8), 
+    hsl(280 89% 64% / 0.5),
+    hsl(234 89% 64% / 0.3),
+    hsl(234 89% 64% / 0.8)
+  );
+}
+
+/* Animated Gradient Border */
+.gradient-border-animated::before {
+  animation: gradient-rotate 3s linear infinite;
+  background-size: 300% 300%;
+}
+
+@keyframes gradient-rotate {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Smart Card with Subtle Glow */
+.smart-card {
+  background: linear-gradient(180deg, 
+    hsl(var(--card)) 0%, 
+    hsl(220 20% 98%) 100%
+  );
+  border: 1px solid hsl(var(--border) / 0.5);
+  box-shadow: 
+    0 1px 3px hsl(var(--foreground) / 0.02),
+    0 4px 12px hsl(var(--foreground) / 0.03),
+    inset 0 1px 0 hsl(0 0% 100% / 0.5);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.smart-card:hover {
+  border-color: hsl(var(--primary) / 0.2);
+  box-shadow: 
+    0 4px 12px hsl(var(--primary) / 0.08),
+    0 8px 32px hsl(var(--primary) / 0.06),
+    inset 0 1px 0 hsl(0 0% 100% / 0.6);
+  transform: translateY(-2px);
+}
+
+/* Floating Action Button */
+.fab {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 
+    0 4px 14px hsl(var(--primary) / 0.25),
+    0 2px 6px hsl(var(--primary) / 0.15);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.fab::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, 
+    hsl(0 0% 100% / 0.2) 0%, 
+    transparent 50%
+  );
+  pointer-events: none;
+}
+
+.fab:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 
+    0 8px 20px hsl(var(--primary) / 0.3),
+    0 4px 10px hsl(var(--primary) / 0.2);
+}
+
+.fab:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Input with Gradient Focus */
+.input-smart {
+  border: 1.5px solid hsl(var(--border));
+  background: linear-gradient(180deg, 
+    hsl(var(--background)) 0%, 
+    hsl(220 20% 99%) 100%
+  );
+  transition: all 0.2s ease;
+}
+
+.input-smart:focus {
+  border-color: transparent;
+  outline: none;
+  box-shadow: 
+    0 0 0 3px hsl(var(--primary) / 0.1),
+    inset 0 0 0 1.5px hsl(var(--primary) / 0.5);
+}
+
+/* Progress Bar with Glow */
+.progress-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-glow::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    hsl(0 0% 100% / 0.4) 50%, 
+    transparent 100%
+  );
+  animation: progress-shine 2s ease-in-out infinite;
+}
+
+@keyframes progress-shine {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Micro-interaction: Ripple Effect */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  padding-top: 100%;
+  border-radius: 50%;
+  background: hsl(var(--primary) / 0.1);
+  transform: scale(0);
+  opacity: 1;
+  pointer-events: none;
+}
+
+.ripple:active::after {
+  animation: ripple-effect 0.6s ease-out;
+}
+
+@keyframes ripple-effect {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* Token Card with Chain Color Accent */
+.token-card {
+  position: relative;
+  border-left: 3px solid var(--chain-color, hsl(var(--primary)));
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.token-card:hover {
+  border-left-width: 4px;
+  background: linear-gradient(90deg, 
+    hsl(var(--primary) / 0.03) 0%, 
+    transparent 30%
+  );
+}
+
+/* Checkbox - Smart Style */
+.checkbox-smart {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border: 2px solid hsl(var(--border));
+  border-radius: 6px;
+  background: hsl(var(--background));
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.checkbox-smart:checked {
+  background: linear-gradient(135deg, 
+    hsl(var(--primary)) 0%, 
+    hsl(248 89% 58%) 100%
+  );
+  border-color: transparent;
+}
+
+.checkbox-smart:checked::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 6px;
+  height: 11px;
+  border: solid white;
+  border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg);
+}
+
+.checkbox-smart:hover:not(:checked) {
+  border-color: hsl(var(--primary) / 0.5);
+}
+
+/* Badge with Soft Glow */
+.badge-glow {
+  box-shadow: 
+    0 0 0 1px hsl(var(--primary) / 0.1),
+    0 2px 8px hsl(var(--primary) / 0.15);
+}
+
+/* Tab - Pill Style */
+.tab-pill {
+  position: relative;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  color: hsl(var(--muted-foreground));
+}
+
+.tab-pill[data-active="true"] {
+  background: hsl(var(--primary));
+  color: white;
+  box-shadow: 0 2px 10px hsl(var(--primary) / 0.3);
+}
+
+.tab-pill:not([data-active="true"]):hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+/* ============================================ */
+/* MOBILE OPTIMIZATION */
+/* ============================================ */
+
+/* Touch-friendly tap targets */
+@media (pointer: coarse) {
+  button, a, input, select, textarea {
+    min-height: 48px;
+  }
+  
+  .checkbox-smart {
+    width: 26px;
+    height: 26px;
+  }
+  
+  .tab-pill {
+    padding: 12px 20px;
+  }
+}
+
+/* Bottom safe area for mobile */
+.mobile-bottom-safe {
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+/* Sticky bottom bar */
+.sticky-bottom {
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, 
+    transparent 0%, 
+    hsl(var(--background)) 20%
+  );
+  padding-top: 24px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+/* Mobile card spacing */
+@media (max-width: 640px) {
+  .mobile-card-stack > * + * {
+    margin-top: 12px;
+  }
+  
+  .mobile-compact {
+    padding: 12px;
+  }
+  
+  /* Larger touch targets on mobile */
+  .mobile-touch-target {
+    min-height: 52px;
+    padding: 14px 18px;
+  }
+}
+
+/* Haptic feedback simulation */
+@media (hover: none) {
+  .haptic:active {
+    transform: scale(0.97);
+    transition: transform 0.1s ease;
+  }
+}
+
+/* Pull to refresh indicator */
+.pull-indicator {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: all 0.2s ease;
+}
+
+.pull-indicator.visible {
+  opacity: 1;
+  top: 10px;
+}
+
+/* Swipe hint animation */
+@keyframes swipe-hint {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(10px); }
+}
+
+.swipe-hint {
+  animation: swipe-hint 1.5s ease-in-out infinite;
+}
