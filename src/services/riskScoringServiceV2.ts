@@ -6,15 +6,10 @@
 import { env } from '../config/env';
 import { createLogger } from '../utils/logger';
 import { TIMEOUTS, CACHE_TTL, RISK_LAYER_WEIGHTS } from '../config/constants';
+import { cacheGet, cacheSet } from '../lib/safeCache';
 import type { TokenHolding } from './portfolioService';
-import { Redis } from '@upstash/redis';
 
 const logger = createLogger('risk-scoring-v2');
-
-const redis = new Redis({
-  url: env.UPSTASH_REDIS_REST_URL,
-  token: env.UPSTASH_REDIS_REST_TOKEN,
-});
 
 export type TokenTier = 'LEGIT' | 'DUST' | 'MICRODUST' | 'RISK';
 
@@ -39,16 +34,13 @@ export interface RiskResult {
 export async function calculateRiskScoreV2(
   token: TokenHolding
 ): Promise<RiskResult> {
-  const cacheKey = `risk:v2:${token.chainId}:${token.address}`;
+  const cacheKey = `risk:v2:${token.chainId}:${token.address.toLowerCase()}`;
   
-  // Check cache
-  try {
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      return JSON.parse(cached as string);
-    }
-  } catch (error) {
-    logger.warn({ error }, 'Cache read failed');
+  // Check cache (safe - never throws)
+  const cached = await cacheGet<RiskResult>(cacheKey);
+  if (cached) {
+    logger.debug({ token: token.address }, 'Risk score from cache');
+    return cached;
   }
 
   try {
@@ -167,12 +159,17 @@ export async function calculateRiskScoreV2(
       explanation,
     };
 
-    // Cache for 1 hour
-    try {
-      await redis.setex(cacheKey, CACHE_TTL.RISK_SCORE, JSON.stringify(result));
-    } catch (error) {
-      logger.warn({ error }, 'Cache write failed');
-    }
+    // Cache for 1 hour (safe - never throws)
+    await cacheSet(cacheKey, result, CACHE_TTL.RISK_SCORE);
+    
+    logger.info({ 
+      token: token.symbol, 
+      score: finalScore, 
+      tier,
+      highRiskLayers: Object.entries(layers)
+        .filter(([_, l]) => l.score0to10 >= 7)
+        .map(([name, _]) => name)
+    }, 'Risk score calculated');
 
     return result;
   } catch (error) {

@@ -12,56 +12,7 @@ import { TIMEOUTS, CACHE_TTL } from '../config/constants';
 
 const logger = createLogger('portfolio');
 
-// Memory cache fallback when Redis is not configured
-const memoryCache = new Map<string, { value: any; expires: number }>();
-
-// Safe Redis wrapper that falls back to memory cache
-const cache = {
-  async get(key: string): Promise<any> {
-    // Try memory cache first (always available)
-    const memItem = memoryCache.get(key);
-    if (memItem && memItem.expires > Date.now()) {
-      return memItem.value;
-    }
-    
-    // Try Redis if configured
-    if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
-      try {
-        const { Redis } = await import('@upstash/redis');
-        const redis = new Redis({
-          url: env.UPSTASH_REDIS_REST_URL,
-          token: env.UPSTASH_REDIS_REST_TOKEN,
-        });
-        return await redis.get(key);
-      } catch (e) {
-        logger.warn({ error: e }, 'Redis get failed, using memory cache');
-      }
-    }
-    return null;
-  },
-  
-  async setex(key: string, ttl: number, value: any): Promise<void> {
-    // Always set in memory cache
-    memoryCache.set(key, { value, expires: Date.now() + (ttl * 1000) });
-    
-    // Try Redis if configured
-    if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
-      try {
-        const { Redis } = await import('@upstash/redis');
-        const redis = new Redis({
-          url: env.UPSTASH_REDIS_REST_URL,
-          token: env.UPSTASH_REDIS_REST_TOKEN,
-        });
-        await redis.setex(key, ttl, typeof value === 'string' ? value : JSON.stringify(value));
-      } catch (e) {
-        logger.warn({ error: e }, 'Redis setex failed, using memory cache only');
-      }
-    }
-  }
-};
-
-// Alias for compatibility
-const redis = cache;
+import { cacheGet, cacheSet } from '../lib/safeCache';
 
 export interface TokenHolding {
   chainId: number;
@@ -305,10 +256,9 @@ async function fetchSolanaTokensViaHelius(
 async function getSolanaPrice(): Promise<number> {
   const cacheKey = 'price:solana';
   
-  try {
-    const cached = await redis.get(cacheKey);
-    if (cached) return parseFloat(cached as string);
-  } catch (e) {}
+  // Try cache first
+  const cached = await cacheGet<number>(cacheKey);
+  if (cached !== null) return cached;
 
   try {
     const response = await fetch(
@@ -318,12 +268,12 @@ async function getSolanaPrice(): Promise<number> {
     const data = await response.json();
     const price = data.solana?.usd || 0;
     
-    try {
-      await redis.setex(cacheKey, CACHE_TTL.TOKEN_PRICE, price.toString());
-    } catch (e) {}
+    // Cache for 1 minute
+    await cacheSet(cacheKey, price, CACHE_TTL.TOKEN_PRICE);
     
     return price;
   } catch (error) {
+    logger.warn({ error }, 'Solana price fetch failed, using fallback');
     return 200; // Fallback price
   }
 }
@@ -389,13 +339,9 @@ async function getNativeTokenPrice(chainId: number): Promise<number> {
   const cacheKey = `price:native:${chainId}`;
   
   // Check cache
-  try {
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      return parseFloat(cached as string);
-    }
-  } catch (error) {
-    logger.warn({ error }, 'Cache read failed');
+  const cached = await cacheGet<number>(cacheKey);
+  if (cached !== null) {
+    return cached;
   }
 
   try {
@@ -407,6 +353,8 @@ async function getNativeTokenPrice(chainId: number): Promise<number> {
       137: 'matic-network',
       56: 'binancecoin',
       43114: 'avalanche-2',
+      324: 'ethereum',
+      838592: 'ethereum', // Monad uses ETH-like pricing for now
     };
 
     const coinId = coinIds[chainId] || 'ethereum';
@@ -426,16 +374,17 @@ async function getNativeTokenPrice(chainId: number): Promise<number> {
     const price = data[coinId]?.usd || 0;
 
     // Cache for 1 minute
-    try {
-      await redis.setex(cacheKey, CACHE_TTL.TOKEN_PRICE, price.toString());
-    } catch (error) {
-      logger.warn({ error }, 'Cache write failed');
-    }
+    await cacheSet(cacheKey, price, CACHE_TTL.TOKEN_PRICE);
 
     return price;
   } catch (error) {
-    logger.error({ error, chainId }, 'Price fetch failed');
-    return 0;
+    logger.warn({ error, chainId }, 'Price fetch failed, using fallback');
+    // Fallback prices
+    const fallbackPrices: Record<number, number> = {
+      1: 3500, 8453: 3500, 42161: 3500, 10: 3500, 324: 3500,
+      137: 0.8, 56: 600, 43114: 35, 838592: 0,
+    };
+    return fallbackPrices[chainId] || 0;
   }
 }
 
@@ -627,40 +576,77 @@ export async function getTokenMetadata(
   chainId: number,
   tokenAddress: string
 ): Promise<Partial<TokenHolding>> {
-  const cacheKey = `metadata:${chainId}:${tokenAddress}`;
+  const cacheKey = `metadata:${chainId}:${tokenAddress.toLowerCase()}`;
 
   // Check cache
-  try {
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      return JSON.parse(cached as string);
-    }
-  } catch (error) {
-    logger.warn({ error }, 'Cache read failed');
+  const cached = await cacheGet<Partial<TokenHolding>>(cacheKey);
+  if (cached) {
+    return cached;
   }
 
   try {
-    // Fetch from Moralis or other source
-    const metadata = {
+    // Try Moralis for metadata
+    const chainMap: Record<number, string> = {
+      1: 'eth', 8453: 'base', 42161: 'arbitrum', 10: 'optimism',
+      137: 'polygon', 56: 'bsc', 43114: 'avalanche', 324: 'zksync',
+    };
+    
+    const chain = chainMap[chainId];
+    if (chain && env.MORALIS_API_KEY) {
+      try {
+        const response = await fetch(
+          `${env.NEXT_PUBLIC_MORALIS_API_URL || 'https://deep-index.moralis.io/api/v2.2'}/erc20/metadata?chain=${chain}&addresses[]=${tokenAddress}`,
+          {
+            headers: { 'X-API-Key': env.MORALIS_API_KEY },
+            signal: AbortSignal.timeout(TIMEOUTS.API),
+          }
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data[0]) {
+            const token = data[0];
+            const metadata: Partial<TokenHolding> = {
+              chainId,
+              address: tokenAddress,
+              symbol: token.symbol || 'UNKNOWN',
+              name: token.name || 'Unknown Token',
+              decimals: parseInt(token.decimals || '18'),
+              logoUrl: token.logo || token.thumbnail,
+            };
+            
+            // Cache for 30 minutes
+            await cacheSet(cacheKey, metadata, CACHE_TTL.TOKEN_METADATA);
+            return metadata;
+          }
+        }
+      } catch (e) {
+        logger.debug({ error: e }, 'Moralis metadata fetch failed');
+      }
+    }
+
+    // Fallback metadata
+    const metadata: Partial<TokenHolding> = {
       chainId,
       address: tokenAddress,
       symbol: 'UNKNOWN',
       name: 'Unknown Token',
       decimals: 18,
-      logoUrl: undefined,
     };
 
     // Cache for 30 minutes
-    try {
-      await redis.setex(cacheKey, CACHE_TTL.TOKEN_METADATA, JSON.stringify(metadata));
-    } catch (error) {
-      logger.warn({ error }, 'Cache write failed');
-    }
+    await cacheSet(cacheKey, metadata, CACHE_TTL.TOKEN_METADATA);
 
     return metadata;
   } catch (error) {
     logger.error({ error, chainId, tokenAddress }, 'Metadata fetch failed');
-    return {};
+    return {
+      chainId,
+      address: tokenAddress,
+      symbol: 'UNKNOWN',
+      name: 'Unknown Token',
+      decimals: 18,
+    };
   }
 }
 
