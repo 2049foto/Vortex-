@@ -11,6 +11,8 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAccount, useDisconnect } from 'wagmi';
+import { useWalletModal } from './providers';
 import { 
   Wallet, 
   Search, 
@@ -25,8 +27,12 @@ import {
   TrendingUp,
   BarChart3,
   Layers,
-  Star
+  Star,
+  LogOut,
+  Menu,
+  X
 } from 'lucide-react';
+import Link from 'next/link';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -328,14 +334,126 @@ function SecurityBadges() {
   );
 }
 
+function LandingHeader() {
+  const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { open: openWalletModal } = useWalletModal();
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const shortAddress = address 
+    ? `${address.slice(0, 6)}...${address.slice(-4)}` 
+    : '';
+
+  return (
+    <header 
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        isScrolled ? 'bg-background/80 backdrop-blur-xl border-b border-border' : ''
+      }`}
+    >
+      <div className="container">
+        <div className="flex items-center justify-between h-16">
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Layers className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-bold text-lg">Vortex</span>
+          </Link>
+
+          {/* Desktop Nav */}
+          <nav className="hidden md:flex items-center gap-6 text-sm">
+            <a href="#features" className="text-foreground-secondary hover:text-foreground transition-colors">Features</a>
+            <a href="#how-it-works" className="text-foreground-secondary hover:text-foreground transition-colors">How it Works</a>
+            <a href="https://github.com/2049foto/Vortex-" target="_blank" rel="noopener noreferrer" className="text-foreground-secondary hover:text-foreground transition-colors">GitHub</a>
+            <a href="https://docs.vortex.build" className="text-foreground-secondary hover:text-foreground transition-colors">Docs</a>
+          </nav>
+
+          {/* Wallet Button */}
+          <div className="flex items-center gap-3">
+            {isConnected ? (
+              <div className="flex items-center gap-2">
+                <Link href="/dashboard" className="btn btn-secondary btn-sm">
+                  <BarChart3 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Dashboard</span>
+                </Link>
+                <button
+                  onClick={() => disconnect()}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border hover:border-red-500/30 transition-colors group"
+                >
+                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-[10px] font-bold text-white">
+                    {address?.slice(2, 4).toUpperCase()}
+                  </div>
+                  <span className="font-mono text-sm hidden sm:inline">{shortAddress}</span>
+                  <LogOut className="w-4 h-4 text-foreground-muted group-hover:text-red-500 transition-colors" />
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={openWalletModal}
+                className="btn btn-primary btn-sm"
+              >
+                <Wallet className="w-4 h-4" />
+                <span>Connect Wallet</span>
+              </button>
+            )}
+
+            {/* Mobile Menu Toggle */}
+            <button 
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className="md:hidden p-2 rounded-lg hover:bg-card-hover transition-colors"
+            >
+              {showMobileMenu ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Menu */}
+        <AnimatePresence>
+          {showMobileMenu && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="md:hidden border-t border-border overflow-hidden"
+            >
+              <nav className="flex flex-col py-4 gap-2">
+                <a href="#features" onClick={() => setShowMobileMenu(false)} className="px-4 py-2 text-foreground-secondary hover:text-foreground">Features</a>
+                <a href="#how-it-works" onClick={() => setShowMobileMenu(false)} className="px-4 py-2 text-foreground-secondary hover:text-foreground">How it Works</a>
+                <a href="https://github.com/2049foto/Vortex-" target="_blank" rel="noopener noreferrer" className="px-4 py-2 text-foreground-secondary hover:text-foreground">GitHub</a>
+              </nav>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </header>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function LandingClient() {
   const router = useRouter();
+  const { address, isConnected } = useAccount();
   const [walletAddress, setWalletAddress] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Auto-fill connected wallet address
+  useEffect(() => {
+    if (isConnected && address && !walletAddress) {
+      setWalletAddress(address);
+    }
+  }, [isConnected, address, walletAddress]);
 
   const handleScan = useCallback(async () => {
     if (!walletAddress) return;
@@ -347,6 +465,9 @@ export default function LandingClient() {
 
   return (
     <div className="page">
+      {/* Header */}
+      <LandingHeader />
+
       {/* Hero Section */}
       <section className="hero-bg min-h-[90vh] flex flex-col justify-center relative overflow-hidden">
         {/* Animated background elements */}
