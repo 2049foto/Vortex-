@@ -107,7 +107,9 @@ export async function createConsolidation(params: {
   data: {
     requestId: string;
     status: string;
-    plan: any;
+    plan?: any;
+    requiresClientExecution?: boolean;
+    message?: string;
   };
 }> {
   return apiCall('/api/v1/swap', {

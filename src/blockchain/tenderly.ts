@@ -218,6 +218,7 @@ export async function simulateBatch(
         logs: [],
         trace: [],
         errorMessage: result.reason?.message || 'Simulation failed',
+        simulated: false,
       };
     }
   });

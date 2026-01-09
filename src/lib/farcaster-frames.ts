@@ -4,7 +4,8 @@
  * Updated: Jan 9, 2026
  */
 
-import { CHAINS } from './chainIcons';
+// Chain config is imported when needed
+// import { CHAINS } from './chainIcons';
 
 // Frame V2 Types
 export interface FrameAction {
