@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAccount } from 'wagmi';
+import { useAppKit } from '@reown/appkit/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, 
@@ -10,8 +11,6 @@ import {
   ArrowRight, 
   Shield, 
   Zap, 
-  TrendingUp,
-  CheckCircle,
   Sparkles,
   Globe,
   Lock
@@ -52,6 +51,7 @@ const FEATURES = [
 export default function LandingClient() {
   const router = useRouter();
   const { address, isConnected } = useAccount();
+  const { open: openWalletModal } = useAppKit();
   const [walletInput, setWalletInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
@@ -153,9 +153,9 @@ export default function LandingClient() {
             </button>
           </div>
           
-          {/* Quick action - use connected wallet */}
+          {/* Quick actions */}
           <AnimatePresence>
-            {isConnected && !walletInput && (
+            {isConnected && !walletInput ? (
               <motion.button
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -166,6 +166,18 @@ export default function LandingClient() {
               >
                 <Wallet className="w-4 h-4" />
                 Use connected wallet
+              </motion.button>
+            ) : !isConnected && !walletInput && (
+              <motion.button
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="flex items-center gap-2 mt-3 mx-auto text-sm"
+                style={{ color: 'hsl(var(--accent))' }}
+                onClick={() => openWalletModal({ view: 'Connect' })}
+              >
+                <Wallet className="w-4 h-4" />
+                Connect wallet to auto-fill
               </motion.button>
             )}
           </AnimatePresence>

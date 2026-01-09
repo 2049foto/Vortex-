@@ -1,11 +1,37 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, useCallback } from 'react';
-import { WagmiProvider } from 'wagmi';
+import { WagmiProvider, type State } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { wagmiConfig } from '@/lib/web3';
+import { createAppKit } from '@reown/appkit/react';
+import { wagmiAdapter, projectId, metadata, supportedChains } from '@/lib/web3';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
+import { base } from 'wagmi/chains';
+
+// Initialize Reown AppKit - cast networks to satisfy AppKit types
+const appKitNetworks = [base, ...supportedChains.filter(c => c.id !== base.id)] as const;
+
+if (typeof window !== 'undefined') {
+  createAppKit({
+    adapters: [wagmiAdapter],
+    projectId,
+    // @ts-expect-error - AppKit network types are strict, but our chains are compatible
+    networks: appKitNetworks,
+    defaultNetwork: base,
+    metadata,
+    features: {
+      analytics: true,
+      email: false,
+      socials: false,
+    },
+    themeMode: 'light',
+    themeVariables: {
+      '--w3m-accent': '#0052FF',
+      '--w3m-border-radius-master': '12px',
+    },
+  });
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TOAST SYSTEM - Minimal & Non-intrusive
@@ -216,7 +242,7 @@ function LoadingScreen() {
 // MAIN PROVIDERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children, initialState }: { children: React.ReactNode; initialState?: State }) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
@@ -237,7 +263,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <WagmiProvider config={wagmiConfig}>
+    <WagmiProvider config={wagmiAdapter.wagmiConfig} initialState={initialState}>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <AnimatePresence mode="wait">
