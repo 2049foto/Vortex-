@@ -9,14 +9,59 @@ import { getTokenBalance, getEthBalance } from '../blockchain/rpc';
 import { createLogger } from '../utils/logger';
 import { retry } from '../utils/helpers';
 import { TIMEOUTS, CACHE_TTL } from '../config/constants';
-import { Redis } from '@upstash/redis';
 
 const logger = createLogger('portfolio');
 
-const redis = new Redis({
-  url: env.UPSTASH_REDIS_REST_URL,
-  token: env.UPSTASH_REDIS_REST_TOKEN,
-});
+// Memory cache fallback when Redis is not configured
+const memoryCache = new Map<string, { value: any; expires: number }>();
+
+// Safe Redis wrapper that falls back to memory cache
+const cache = {
+  async get(key: string): Promise<any> {
+    // Try memory cache first (always available)
+    const memItem = memoryCache.get(key);
+    if (memItem && memItem.expires > Date.now()) {
+      return memItem.value;
+    }
+    
+    // Try Redis if configured
+    if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
+      try {
+        const { Redis } = await import('@upstash/redis');
+        const redis = new Redis({
+          url: env.UPSTASH_REDIS_REST_URL,
+          token: env.UPSTASH_REDIS_REST_TOKEN,
+        });
+        return await redis.get(key);
+      } catch (e) {
+        logger.warn({ error: e }, 'Redis get failed, using memory cache');
+      }
+    }
+    return null;
+  },
+  
+  async setex(key: string, ttl: number, value: any): Promise<void> {
+    // Always set in memory cache
+    memoryCache.set(key, { value, expires: Date.now() + (ttl * 1000) });
+    
+    // Try Redis if configured
+    if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
+      try {
+        const { Redis } = await import('@upstash/redis');
+        const redis = new Redis({
+          url: env.UPSTASH_REDIS_REST_URL,
+          token: env.UPSTASH_REDIS_REST_TOKEN,
+        });
+        await redis.setex(key, ttl, typeof value === 'string' ? value : JSON.stringify(value));
+      } catch (e) {
+        logger.warn({ error: e }, 'Redis setex failed, using memory cache only');
+      }
+    }
+  }
+};
+
+// Alias for compatibility
+const redis = cache;
 
 export interface TokenHolding {
   chainId: number;

@@ -1,18 +1,19 @@
 /**
  * Scan Component for VORTEX PROTOCOL
  * Premium portfolio scanning with 11-chain support and asset classification
- * Scans ALL tokens with balance > 0 on MAINNET chains
+ * REDESIGNED: January 2026 - Modern, Smart, Friendly UI
  */
 
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, RefreshCw, ArrowRight, ArrowLeft, 
   CheckCircle2, AlertTriangle, Sparkles, Filter,
   ChevronDown, ChevronUp, ExternalLink, Info, Layers, X, Shield,
-  TrendingUp, Zap, Eye, EyeOff, ChevronRight
+  TrendingUp, Zap, Eye, EyeOff, ChevronRight, Loader2, Wallet,
+  ScanLine, Globe, Coins
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -310,105 +311,171 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
   ];
 
   // =============================================
-  // SCANNING STATE
+  // SCANNING STATE - Premium 2026 Design
   // =============================================
   if (isScanning) {
     const chainNames = Object.values(CHAINS).map(c => c.name);
     
     return (
-      <div className="flex flex-col items-center justify-center min-h-[80vh] px-4">
-        {/* Main Progress Circle */}
-        <div className="relative w-48 h-48 mb-8">
-          {/* Background circle */}
-          <svg className="absolute inset-0 w-full h-full -rotate-90">
-            <circle
-              cx="96" cy="96" r="88"
-              className="fill-none stroke-slate-100"
-              strokeWidth="8"
-            />
-            <motion.circle
-              cx="96" cy="96" r="88"
-              className="fill-none stroke-indigo-600"
-              strokeWidth="8"
-              strokeLinecap="round"
-              strokeDasharray={553}
-              initial={{ strokeDashoffset: 553 }}
-              animate={{ strokeDashoffset: 553 - (553 * scanProgress) / 100 }}
-              transition={{ duration: 0.2 }}
-            />
-          </svg>
-          
-          {/* Animated pulse ring */}
+      <div className="flex flex-col items-center justify-center min-h-[80vh] px-4 relative">
+        {/* Animated Background */}
+        <div className="absolute inset-0 -z-10 overflow-hidden">
+          <motion.div 
+            animate={{ 
+              scale: [1, 1.3, 1],
+              rotate: [0, 180, 360],
+              opacity: [0.1, 0.2, 0.1],
+            }}
+            transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-conic from-indigo-500/20 via-purple-500/10 to-indigo-500/20 rounded-full blur-3xl"
+          />
+        </div>
+
+        {/* Main Progress Circle with Gradient Border */}
+        <div className="relative w-56 h-56 mb-10">
+          {/* Outer glow */}
           <motion.div
-            animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.1, 0.3] }}
+            animate={{ scale: [1, 1.05, 1], opacity: [0.4, 0.6, 0.4] }}
             transition={{ duration: 2, repeat: Infinity }}
-            className="absolute inset-0 rounded-full border-4 border-indigo-300"
+            className="absolute inset-0 rounded-full bg-gradient-to-r from-indigo-500/30 via-purple-500/30 to-indigo-500/30 blur-xl"
           />
           
-          {/* Center content */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
+          {/* Progress ring - Gradient border effect */}
+          <svg className="absolute inset-0 w-full h-full -rotate-90">
+            {/* Background track */}
+            <circle
+              cx="112" cy="112" r="100"
+              className="fill-none stroke-slate-100"
+              strokeWidth="10"
+            />
+            {/* Progress arc with gradient */}
+            <motion.circle
+              cx="112" cy="112" r="100"
+              className="fill-none"
+              stroke="url(#progressGradient)"
+              strokeWidth="10"
+              strokeLinecap="round"
+              strokeDasharray={628}
+              initial={{ strokeDashoffset: 628 }}
+              animate={{ strokeDashoffset: 628 - (628 * scanProgress) / 100 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+            />
+            <defs>
+              <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#6366f1" />
+                <stop offset="50%" stopColor="#8b5cf6" />
+                <stop offset="100%" stopColor="#6366f1" />
+              </linearGradient>
+            </defs>
+          </svg>
+          
+          {/* Inner content with glassmorphism */}
+          <div className="absolute inset-6 rounded-full bg-white/90 backdrop-blur-xl border border-white/50 shadow-xl flex flex-col items-center justify-center">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+              className="absolute inset-4 rounded-full border-2 border-dashed border-indigo-200 opacity-50"
+            />
+            <ScanLine className="w-8 h-8 text-indigo-500 mb-2 animate-pulse" />
             <motion.span 
               key={Math.floor(scanProgress)}
-              initial={{ scale: 1.1, opacity: 0 }}
+              initial={{ scale: 1.2, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className="text-4xl font-bold text-slate-900"
+              className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"
             >
               {Math.round(scanProgress)}%
             </motion.span>
-            <span className="text-sm text-slate-500">Scanning</span>
+            <span className="text-xs text-slate-500 font-medium mt-1">Scanning</span>
           </div>
         </div>
         
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">
-          Scanning Your Portfolio
-        </h2>
-        <p className="text-slate-500 text-center max-w-md mb-8">
-          Analyzing tokens across 11 mainnet chains with 20-layer risk assessment
-        </p>
+        <motion.h2 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-2xl sm:text-3xl font-bold text-slate-900 mb-3 text-center"
+        >
+          Analyzing Your Portfolio
+        </motion.h2>
+        <motion.p 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="text-slate-500 text-center max-w-md mb-10"
+        >
+          Deep scanning {Object.keys(CHAINS).length} mainnet chains with <span className="font-semibold text-indigo-600">20-layer AI risk analysis</span>
+        </motion.p>
         
-        {/* Chain progress indicators */}
-        <div className="grid grid-cols-5 gap-2 max-w-lg">
-          {Object.entries(CHAINS).map(([id, chain], i) => {
-            const isActive = i === currentChainIndex;
-            const isComplete = i < currentChainIndex;
-            
-            return (
-              <motion.div 
-                key={id}
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ 
-                  scale: isActive ? 1.1 : 1, 
-                  opacity: isComplete ? 1 : isActive ? 1 : 0.4 
-                }}
-                className={cn(
-                  "flex flex-col items-center p-2 rounded-xl transition-colors",
-                  isActive && "bg-indigo-50",
-                  isComplete && "bg-emerald-50"
-                )}
-              >
-                <div 
-                  className="w-8 h-8 rounded-full overflow-hidden mb-1 flex items-center justify-center"
-                  style={{ backgroundColor: chain.color }}
+        {/* Chain progress indicators - Smart card style */}
+        <div className="w-full max-w-xl">
+          <div className="flex items-center justify-between mb-3 px-2">
+            <span className="text-xs font-medium text-slate-500">Scanning Chains</span>
+            <span className="text-xs font-medium text-indigo-600">{currentChainIndex + 1}/{Object.keys(CHAINS).length}</span>
+          </div>
+          <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+            {Object.entries(CHAINS).map(([id, chain], i) => {
+              const isActive = i === currentChainIndex;
+              const isComplete = i < currentChainIndex;
+              
+              return (
+                <motion.div 
+                  key={id}
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ 
+                    scale: isActive ? 1.15 : 1, 
+                    opacity: isComplete ? 1 : isActive ? 1 : 0.35 
+                  }}
+                  transition={{ type: 'spring', stiffness: 300 }}
+                  className={cn(
+                    "flex flex-col items-center p-2 rounded-xl transition-all duration-300",
+                    isActive && "bg-gradient-to-b from-indigo-50 to-white shadow-lg shadow-indigo-100 border border-indigo-200",
+                    isComplete && "bg-emerald-50 border border-emerald-100"
+                  )}
                 >
-                  <img 
-                    src={chain.logoUrl} 
-                    alt={chain.shortName}
-                    className="w-6 h-6 object-contain"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                </div>
-                <span className={cn(
-                  "text-[10px] font-medium",
-                  isActive ? "text-indigo-600" : isComplete ? "text-emerald-600" : "text-slate-400"
-                )}>
-                  {chain.shortName}
-                </span>
-              </motion.div>
-            );
-          })}
+                  <div 
+                    className={cn(
+                      "w-9 h-9 rounded-xl overflow-hidden mb-1.5 flex items-center justify-center shadow-sm transition-all",
+                      isActive && "ring-2 ring-indigo-500 ring-offset-2"
+                    )}
+                    style={{ backgroundColor: chain.color + '20' }}
+                  >
+                    <img 
+                      src={chain.logoUrl} 
+                      alt={chain.shortName}
+                      className="w-6 h-6 object-contain"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                  <span className={cn(
+                    "text-[10px] font-semibold transition-colors",
+                    isActive ? "text-indigo-600" : isComplete ? "text-emerald-600" : "text-slate-400"
+                  )}>
+                    {chain.shortName}
+                  </span>
+                  {isComplete && (
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500 mt-0.5" />
+                  )}
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
+
+        {/* Scan status message */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="mt-8 flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 text-sm"
+        >
+          <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+          <span className="text-slate-600">
+            {currentChainIndex < Object.keys(CHAINS).length 
+              ? `Scanning ${Object.values(CHAINS)[currentChainIndex]?.name || 'chains'}...`
+              : 'Finalizing analysis...'}
+          </span>
+        </motion.div>
       </div>
     );
   }

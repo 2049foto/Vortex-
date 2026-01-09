@@ -12,9 +12,9 @@ import { Scan } from '@/ui-components/scan';
 import { scanWallet } from '@/lib/api';
 import Turnstile from '@/components/ui/turnstile';
 
-// All supported mainnet chains
-const SUPPORTED_CHAIN_IDS = [1, 8453, 42161, 10, 137, 56, 43114, 324];
-// Note: Monad (838592) excluded until providers support it
+// All supported mainnet chains (10 EVM + Solana special handling)
+const SUPPORTED_CHAIN_IDS = [1, 8453, 42161, 10, 137, 56, 43114, 324, 838592];
+// Monad (838592) included as mainnet
 
 export function ScanPageClient() {
   const { address, isConnected } = useAccount();
@@ -49,17 +49,27 @@ export function ScanPageClient() {
     setError(null);
 
     try {
-      const result = await scanWallet(targetAddress, SUPPORTED_CHAIN_IDS, turnstileToken);
-      setScanResult(result.data);
-      
-      // Log for debugging
-      console.log('Scan complete:', {
-        wallet: targetAddress,
-        totalTokens: result.data?.tokens?.length || 0,
+      console.log('[SCAN-CLIENT] Starting scan...', { 
+        targetAddress: targetAddress.substring(0, 10) + '...',
         chains: SUPPORTED_CHAIN_IDS.length,
+        hasTurnstile: !!turnstileToken,
+      });
+
+      const result = await scanWallet(targetAddress, SUPPORTED_CHAIN_IDS, turnstileToken);
+      
+      console.log('[SCAN-CLIENT] Scan result:', {
+        success: result.success,
+        tokenCount: result.data?.tokens?.length || 0,
         summary: result.data?.summary,
       });
 
+      if (result.success === false) {
+        // API returned an error
+        throw new Error((result as any).message || (result as any).error || 'Scan failed');
+      }
+
+      setScanResult(result.data);
+      
       // Track successful scan
       if (typeof window !== 'undefined' && (window as any).posthog) {
         (window as any).posthog.capture('wallet_scanned', {
@@ -67,19 +77,34 @@ export function ScanPageClient() {
           chains_scanned: SUPPORTED_CHAIN_IDS.length,
         });
       }
-    } catch (err) {
-      console.error('Scan error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to scan wallet';
-      setError(errorMessage);
+    } catch (err: any) {
+      console.error('[SCAN-CLIENT] Scan error:', err);
+      
+      // Extract error message
+      let errorMessage = 'Failed to scan wallet';
+      if (err?.message) {
+        errorMessage = err.message;
+      } else if (err?.data?.message) {
+        errorMessage = err.data.message;
+      } else if (err?.data?.error) {
+        errorMessage = err.data.error;
+      }
       
       // Provide helpful error messages
-      if (errorMessage.includes('Bot verification')) {
-        setError('Please complete the security check and try again');
+      if (errorMessage.includes('Bot verification') || errorMessage.includes('Turnstile')) {
+        setError('Security check issue. Please refresh the page and try again.');
       } else if (errorMessage.includes('rate limit')) {
-        setError('Too many requests. Please wait a moment and try again');
-      } else if (errorMessage.includes('network')) {
-        setError('Network error. Please check your connection and try again');
+        setError('Too many requests. Please wait a moment and try again.');
+      } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+        setError('Network error. Please check your connection and try again.');
+      } else if (errorMessage.includes('MORALIS') || errorMessage.includes('API key')) {
+        setError('Backend configuration issue. Please try again later.');
+      } else {
+        setError(errorMessage);
       }
+
+      // Still allow UI to show even with error
+      setScanResult({ tokens: [], summary: null });
     } finally {
       setIsLoading(false);
     }
