@@ -37,7 +37,7 @@ export interface ConsolidationPlan {
 }
 
 export interface SwapRoute {
-  router: '1inch' | 'uniswap_v4' | 'curve' | 'balancer';
+  router: '1inch' | 'uniswap_v4' | 'curve' | 'balancer' | 'relay';
   fromToken: TokenHolding;
   toToken: string; // Base chain target token
   amountIn: string;
@@ -139,7 +139,7 @@ export async function createConsolidationPlan(
             if (relayQuote.steps && relayQuote.steps.length > 0) {
               // Add bridge step to plan
               plan.swaps.push({
-                router: 'relay' as any,
+                router: 'relay',
                 fromToken: token,
                 toToken: targetToken,
                 amountIn: token.balance,
