@@ -15,6 +15,7 @@ import { sponsorWithFallback } from '../blockchain/coinbase';
 import { sendUserOp, getUserOpReceipt } from '../blockchain/pimlico';
 import { validatePaymasterPolicy } from '../middleware/paymasterPolicy';
 import { getBridgeQuotes, chooseBridge } from './bridgeService';
+import { getRelayQuote, executeRelayBridge, toRelayCurrency, isRelaySupported } from './relayService';
 import { db } from '../db/client';
 import { consolidationRequests, consolidationAnalytics, users } from '../db/schema';
 import { eq } from 'drizzle-orm';
@@ -119,8 +120,51 @@ export async function createConsolidationPlan(
   
   for (const { token } of swapTokens) {
     try {
-      // If token is on different chain, check if we should bridge
+      // If token is on different chain, use Relay.link to bridge
       if (token.chainId !== OUTPUT_CHAIN_ID) {
+        // Check if Relay supports this chain pair
+        if (isRelaySupported(token.chainId, OUTPUT_CHAIN_ID)) {
+          try {
+            // Use Relay.link for cross-chain bridge
+            const relayQuote = await getRelayQuote({
+              user: walletAddress,
+              originChainId: token.chainId,
+              destinationChainId: OUTPUT_CHAIN_ID,
+              originCurrency: toRelayCurrency(token.address),
+              destinationCurrency: toRelayCurrency(targetToken),
+              amount: token.balance,
+              tradeType: 'EXACT_INPUT',
+            });
+
+            if (relayQuote.steps && relayQuote.steps.length > 0) {
+              // Add bridge step to plan
+              plan.swaps.push({
+                router: 'relay' as any,
+                fromToken: token,
+                toToken: targetToken,
+                amountIn: token.balance,
+                expectedOut: relayQuote.estimatedOutput || '0',
+                estimatedGas: '0', // Gas sponsored by Relay
+                priceImpact: 0,
+                tx: relayQuote.steps[0]?.items[0]?.data ? {
+                  to: relayQuote.steps[0].items[0].data.to,
+                  data: relayQuote.steps[0].items[0].data.data,
+                  value: relayQuote.steps[0].items[0].data.value,
+                } : undefined,
+              });
+
+              logger.info(
+                { token: token.symbol, requestId: relayQuote.requestId },
+                'Relay bridge quote obtained'
+              );
+              continue; // Skip swap route finding, Relay handles it
+            }
+          } catch (relayError) {
+            logger.warn({ error: relayError, token: token.symbol }, 'Relay bridge failed, trying fallback');
+          }
+        }
+
+        // Fallback to old bridge service
         const bridgeQuotes = await getBridgeQuotes(
           token.chainId,
           OUTPUT_CHAIN_ID,
@@ -132,21 +176,15 @@ export async function createConsolidationPlan(
         const bridgeDecision = chooseBridge(bridgeQuotes, token.valueUsd);
         
         if (bridgeDecision.shouldBridge && bridgeDecision.selectedBridge) {
-          // Bridge first, then swap on Base
           logger.info(
             { token: token.symbol, bridge: bridgeDecision.selectedBridge.bridge },
             'Will bridge token to Base before swapping'
           );
-          
-          // After bridging, swap on Base
-          // For now, we'll swap directly on source chain and let user bridge manually
-          // TODO: Implement full bridge + swap flow
         } else {
           logger.info(
             { token: token.symbol, reason: bridgeDecision.reason },
             'Skipping bridge (not economical)'
           );
-          // Skip tokens that aren't worth bridging
           plan.tokens.find(t => t.token.address === token.address)!.action = 'skip';
           plan.tokens.find(t => t.token.address === token.address)!.reason = bridgeDecision.reason;
           continue;
@@ -382,13 +420,20 @@ export async function executeConsolidation(
 }
 
 /**
- * Execute single swap
+ * Execute single swap or bridge
  */
 async function executeSwap(swap: SwapRoute, walletAddress: string): Promise<string> {
   logger.info(
     { router: swap.router, fromToken: swap.fromToken.address },
     'Executing swap'
   );
+
+  // If this is a Relay bridge (has tx data from Relay quote)
+  if (swap.router === 'relay' && swap.tx) {
+    // Relay bridge execution is handled client-side via wallet
+    // Return a placeholder - actual execution happens in client
+    throw new Error('Relay bridge must be executed client-side via wallet');
+  }
 
   // Get swap transaction
   let swapTx: any;

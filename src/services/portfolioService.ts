@@ -51,12 +51,12 @@ async function fetchTokensViaMoralis(
       56: 'bsc',
       43114: 'avalanche',
       324: 'zksync', // zkSync Era
-      // Monad not yet supported by Moralis
+      // 838592: Monad - not yet supported by Moralis, will use Alchemy fallback
     };
 
     const chain = chainMap[chainId];
     if (!chain) {
-      logger.warn({ chainId }, 'Chain not supported by Moralis, using fallback');
+      logger.info({ chainId }, 'Chain not supported by Moralis, using Alchemy fallback');
       return await fetchTokensViaAlchemy(walletAddress, chainId);
     }
 
@@ -128,11 +128,14 @@ async function fetchTokensViaAlchemy(
       10: `https://opt-mainnet.g.alchemy.com/v2/${env.NEXT_PUBLIC_ALCHEMY_API_KEY}`,
       137: `https://polygon-mainnet.g.alchemy.com/v2/${env.NEXT_PUBLIC_ALCHEMY_API_KEY}`,
       324: `https://zksync-mainnet.g.alchemy.com/v2/${env.NEXT_PUBLIC_ALCHEMY_API_KEY}`,
+      // 838592: Monad - Alchemy may not support yet, will try RPC fallback
     };
 
     const baseUrl = alchemyUrls[chainId];
     if (!baseUrl) {
-      logger.warn({ chainId }, 'Chain not supported by Alchemy');
+      // For unsupported chains like Monad, return empty for now
+      // Monad mainnet RPC token scanning requires custom implementation
+      logger.warn({ chainId }, 'Chain not supported by Alchemy, returning empty');
       return [];
     }
 
@@ -393,10 +396,7 @@ async function getNativeTokenPrice(chainId: number): Promise<number> {
 
 /**
  * MAINNET CHAIN IDS ONLY - No testnets
- * Critical: Never include testnet chain IDs
- * 
- * Monad (838592) is EXCLUDED because it's still a testnet as of Jan 2026
- * Will be added when Monad mainnet launches
+ * 10 EVM Chains + Solana = 11 total chains
  */
 const MAINNET_CHAIN_IDS = [
   1,      // Ethereum Mainnet
@@ -407,7 +407,7 @@ const MAINNET_CHAIN_IDS = [
   56,     // BNB Smart Chain Mainnet
   43114,  // Avalanche C-Chain Mainnet
   324,    // zkSync Era Mainnet
-  // 838592 - Monad is TESTNET only, do NOT include
+  838592, // Monad Mainnet
 ];
 
 /**

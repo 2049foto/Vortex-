@@ -41,8 +41,7 @@ interface ScanProps {
   onNavigate?: (path: string) => void;
 }
 
-// Chain data (MAINNET ONLY) - 9 Chains: 8 EVM + Solana
-// Monad excluded - still testnet as of Jan 2026
+// Chain data (MAINNET ONLY) - 10 EVM Chains + Solana = 11 total
 const CHAINS: Record<number, { 
   id: string; 
   name: string; 
@@ -114,6 +113,14 @@ const CHAINS: Record<number, {
     shortName: 'zkS', 
     logoUrl: 'https://zksync.io/favicon-32x32.png',
     gradient: 'from-violet-500 to-violet-700' 
+  },
+  838592: { 
+    id: 'monad', 
+    name: 'Monad', 
+    color: '#00D9FF', 
+    shortName: 'MON', 
+    logoUrl: 'https://ui-avatars.com/api/?name=Monad&background=00D9FF&color=fff&size=32',
+    gradient: 'from-cyan-500 to-blue-600' 
   },
   0: { 
     id: 'solana', 
@@ -539,8 +546,10 @@ export function Scan({ address, isLoading: externalLoading, scanResult, error, o
                         <span>{chain.shortName}</span>
                         {tokenCount > 0 && (
                           <span className={cn(
-                            "px-1.5 py-0.5 rounded text-xs",
-                            isSelected ? "bg-white/20" : "bg-slate-100"
+                            "px-2 py-0.5 rounded-full text-xs font-bold min-w-[20px] text-center",
+                            isSelected 
+                              ? "bg-white/30 text-white shadow-sm" 
+                              : "bg-indigo-100 text-indigo-700"
                           )}>
                             {tokenCount}
                           </span>

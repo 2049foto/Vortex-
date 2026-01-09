@@ -111,13 +111,46 @@ export async function POST(request: NextRequest) {
                 toToken: outputToken || 'ETH',
                 expectedOut: s.expectedOut,
                 priceImpact: s.priceImpact,
+                // Include Relay tx data for client-side execution
+                tx: s.tx,
               })),
             },
           },
         });
       }
 
-      // Step 4: Execute consolidation (real mainnet execution)
+      // Step 4: For Relay bridges, return plan for client-side execution
+      // For same-chain swaps, execute server-side
+      const hasRelayBridges = plan.swaps.some(s => s.router === 'relay');
+      
+      if (hasRelayBridges) {
+        // Return plan with Relay tx data - client will execute
+        return NextResponse.json({
+          success: true,
+          data: {
+            requestId: plan.id,
+            status: 'pending_client_execution',
+            plan: {
+              swapCount: plan.swaps.length,
+              estimatedOutput: plan.estimatedOutput,
+              estimatedGasSaved: plan.estimatedGasSaved,
+              swaps: plan.swaps.map((s) => ({
+                router: s.router,
+                fromToken: s.fromToken.symbol,
+                toToken: outputToken || 'ETH',
+                expectedOut: s.expectedOut,
+                priceImpact: s.priceImpact,
+                tx: s.tx, // Relay tx data for client
+                fromTokenAddress: s.fromToken.address,
+                fromChainId: s.fromToken.chainId,
+              })),
+            },
+            message: 'Please execute transactions using your wallet',
+          },
+        });
+      }
+
+      // Step 4: Execute consolidation (real mainnet execution for same-chain swaps)
       const result = await executeConsolidation(plan.id, walletAddress, plan);
 
       // Step 5: Send notification on completion

@@ -81,8 +81,8 @@ export async function scanWallet(
     },
     body: JSON.stringify({ 
       walletAddress, 
-      // Default to all MAINNET chains (Monad excluded - still testnet)
-      chainIds: chainIds || [1, 8453, 42161, 10, 137, 56, 43114, 324],
+      // Default to all 10 EVM MAINNET chains
+      chainIds: chainIds || [1, 8453, 42161, 10, 137, 56, 43114, 324, 838592],
       turnstileToken: turnstileToken || null,
     }),
   });
