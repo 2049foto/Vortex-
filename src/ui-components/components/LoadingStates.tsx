@@ -1,300 +1,285 @@
 /**
- * Loading States Components
- * Skeleton loaders and loading animations for Vortex Protocol
+ * Vortex Protocol - Premium Loading States
+ * Beautiful loading animations and skeleton components
  */
 
 'use client';
 
-import React from 'react';
 import { motion } from 'framer-motion';
-import { cn } from '../utils/cn';
+import { Sparkles, Loader2 } from 'lucide-react';
 
-// Skeleton Component
-export function Skeleton({ className }: { className?: string }) {
+// Skeleton Pulse Animation
+const pulse = {
+  initial: { opacity: 0.4 },
+  animate: { 
+    opacity: [0.4, 0.7, 0.4],
+    transition: { duration: 1.5, repeat: Infinity, ease: 'easeInOut' }
+  }
+};
+
+/**
+ * Card Skeleton for loading states
+ */
+export function CardSkeleton({ className = '' }: { className?: string }) {
   return (
-    <div
-      className={cn(
-        "animate-pulse rounded-lg bg-slate-200",
-        className
-      )}
-    />
+    <motion.div 
+      variants={pulse}
+      initial="initial"
+      animate="animate"
+      className={`rounded-2xl bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 ${className}`}
+    >
+      <div className="p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-200" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 bg-slate-200 rounded w-24" />
+            <div className="h-3 bg-slate-200 rounded w-16" />
+          </div>
+          <div className="h-6 w-20 bg-slate-200 rounded-lg" />
+        </div>
+        <div className="h-3 bg-slate-200 rounded w-3/4" />
+      </div>
+    </motion.div>
   );
 }
 
-// Token Card Skeleton
-export function TokenCardSkeleton() {
-  return (
-    <div className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-white">
-      <Skeleton className="w-5 h-5 rounded-md" />
-      <Skeleton className="w-10 h-10 rounded-full" />
-      <div className="flex-1">
-        <Skeleton className="h-4 w-20 mb-1.5" />
-        <Skeleton className="h-3 w-32" />
-      </div>
-      <div className="text-right">
-        <Skeleton className="h-4 w-16 mb-1" />
-        <Skeleton className="h-3 w-12" />
-      </div>
-    </div>
-  );
-}
-
-// Token List Skeleton
+/**
+ * Token List Skeleton
+ */
 export function TokenListSkeleton({ count = 5 }: { count?: number }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {Array.from({ length: count }).map((_, i) => (
-        <motion.div
-          key={i}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.05 }}
-        >
-          <TokenCardSkeleton />
-        </motion.div>
+        <CardSkeleton key={i} />
       ))}
     </div>
   );
 }
 
-// Dashboard Stats Skeleton
-export function StatsCardSkeleton() {
+/**
+ * Stats Skeleton
+ */
+export function StatsSkeleton() {
   return (
-    <div className="p-4 rounded-xl bg-white border border-slate-100">
-      <div className="flex items-center gap-3">
-        <Skeleton className="w-10 h-10 rounded-lg" />
-        <div className="flex-1">
-          <Skeleton className="h-3 w-20 mb-2" />
-          <Skeleton className="h-6 w-24" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Dashboard Skeleton
-export function DashboardSkeleton() {
-  return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Skeleton className="h-7 w-32 mb-2" />
-          <Skeleton className="h-4 w-48" />
-        </div>
-        <Skeleton className="h-10 w-28 rounded-xl" />
-      </div>
-      
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[1, 2, 3, 4].map((i) => (
-          <StatsCardSkeleton key={i} />
-        ))}
-      </div>
-      
-      <div className="p-5 rounded-2xl bg-white border border-slate-100">
-        <Skeleton className="h-6 w-40 mb-4" />
-        <Skeleton className="h-20 w-full rounded-lg" />
-      </div>
-    </div>
-  );
-}
-
-// Scan Loading Animation
-export function ScanLoadingAnimation({ progress = 0 }: { progress?: number }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16">
-      <div className="relative w-32 h-32 mb-6">
-        {/* Outer ring */}
-        <svg className="w-full h-full transform -rotate-90">
-          <circle
-            cx="64"
-            cy="64"
-            r="56"
-            fill="none"
-            stroke="#e2e8f0"
-            strokeWidth="8"
-          />
-          <motion.circle
-            cx="64"
-            cy="64"
-            r="56"
-            fill="none"
-            stroke="url(#gradient)"
-            strokeWidth="8"
-            strokeLinecap="round"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: progress / 100 }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-            style={{
-              strokeDasharray: '352',
-              strokeDashoffset: '0',
-            }}
-          />
-          <defs>
-            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#6366f1" />
-              <stop offset="100%" stopColor="#a855f7" />
-            </linearGradient>
-          </defs>
-        </svg>
-        
-        {/* Center content */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-2xl font-bold text-slate-900">{progress}%</span>
-        </div>
-      </div>
-      
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="text-sm text-slate-500"
-      >
-        Scanning across 11 chains...
-      </motion.p>
-      
-      {/* Chain indicators */}
-      <div className="flex gap-1.5 mt-4">
-        {['Base', 'ETH', 'Arb', 'OP', 'POL'].map((chain, i) => (
-          <motion.div
-            key={chain}
-            initial={{ scale: 0.8, opacity: 0.3 }}
-            animate={{ 
-              scale: progress > i * 20 ? 1 : 0.8,
-              opacity: progress > i * 20 ? 1 : 0.3,
-            }}
-            transition={{ duration: 0.3 }}
-            className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white",
-              i === 0 ? 'bg-blue-600' :
-              i === 1 ? 'bg-slate-600' :
-              i === 2 ? 'bg-blue-500' :
-              i === 3 ? 'bg-red-500' :
-              'bg-purple-600'
-            )}
-          >
-            {chain.slice(0, 1)}
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Consolidation Progress Animation
-export function ConsolidationProgress({ 
-  currentStep, 
-  totalSteps,
-  stepLabels = ['Simulating', 'Approving', 'Executing', 'Confirming']
-}: { 
-  currentStep: number; 
-  totalSteps: number;
-  stepLabels?: string[];
-}) {
-  return (
-    <div className="flex flex-col items-center py-8">
-      {/* Progress bar */}
-      <div className="w-full max-w-xs mb-6">
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${(currentStep / totalSteps) * 100}%` }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
-          />
-        </div>
-      </div>
-      
-      {/* Steps */}
-      <div className="flex justify-between w-full max-w-xs">
-        {stepLabels.map((label, i) => (
-          <div key={label} className="flex flex-col items-center">
-            <motion.div
-              initial={{ scale: 0.8 }}
-              animate={{ 
-                scale: i <= currentStep ? 1 : 0.8,
-                backgroundColor: i < currentStep ? '#10b981' : i === currentStep ? '#6366f1' : '#e2e8f0',
-              }}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium mb-1"
-            >
-              {i < currentStep ? '✓' : i + 1}
-            </motion.div>
-            <span className={cn(
-              "text-[10px] font-medium",
-              i <= currentStep ? 'text-slate-700' : 'text-slate-400'
-            )}>
-              {label}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Empty State Component
-export function EmptyState({
-  icon,
-  title,
-  description,
-  action,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  action?: {
-    label: string;
-    onClick: () => void;
-  };
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center py-16 px-4 text-center"
+    <motion.div 
+      variants={pulse}
+      initial="initial"
+      animate="animate"
+      className="grid grid-cols-3 gap-4"
     >
-      <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
-        {icon}
-      </div>
-      <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
-      <p className="text-sm text-slate-500 max-w-sm mb-6">{description}</p>
-      {action && (
-        <button
-          onClick={action.onClick}
-          className="px-6 py-2.5 rounded-xl bg-slate-900 text-white font-medium hover:bg-slate-800 transition-colors"
-        >
-          {action.label}
-        </button>
-      )}
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+          <div className="h-8 bg-slate-200 rounded w-20 mb-2" />
+          <div className="h-3 bg-slate-200 rounded w-16" />
+        </div>
+      ))}
     </motion.div>
   );
 }
 
-// Error State Component
+/**
+ * Full Page Loading Spinner
+ */
+export function FullPageLoader({ message = 'Loading...' }: { message?: string }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="flex flex-col items-center gap-4"
+      >
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+          className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-xl shadow-indigo-500/30"
+        >
+          <Sparkles className="w-8 h-8 text-white" />
+        </motion.div>
+        <p className="text-slate-600 font-medium">{message}</p>
+      </motion.div>
+    </div>
+  );
+}
+
+/**
+ * Inline Loading Spinner
+ */
+export function InlineLoader({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const sizeClasses = {
+    sm: 'w-4 h-4',
+    md: 'w-6 h-6',
+    lg: 'w-8 h-8'
+  };
+
+  return (
+    <Loader2 className={`${sizeClasses[size]} animate-spin text-indigo-600`} />
+  );
+}
+
+/**
+ * Scanning Progress Animation
+ */
+export function ScanningProgress({ 
+  progress, 
+  currentChain,
+  totalChains = 10 
+}: { 
+  progress: number;
+  currentChain: string;
+  totalChains?: number;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
+      {/* Progress Circle */}
+      <div className="relative w-52 h-52 mb-8">
+        {/* Background Ring */}
+        <svg className="absolute inset-0 w-full h-full -rotate-90">
+          <circle
+            cx="104" cy="104" r="92"
+            className="fill-none stroke-slate-100"
+            strokeWidth="10"
+          />
+          <motion.circle
+            cx="104" cy="104" r="92"
+            className="fill-none stroke-indigo-600"
+            strokeWidth="10"
+            strokeLinecap="round"
+            strokeDasharray={578}
+            initial={{ strokeDashoffset: 578 }}
+            animate={{ strokeDashoffset: 578 - (578 * progress) / 100 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+          />
+        </svg>
+        
+        {/* Animated Glow */}
+        <motion.div
+          animate={{ 
+            scale: [1, 1.05, 1], 
+            opacity: [0.2, 0.4, 0.2] 
+          }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="absolute inset-2 rounded-full bg-indigo-500/10"
+        />
+        
+        {/* Center Content */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+            className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center mb-3 shadow-lg shadow-indigo-500/30"
+          >
+            <Sparkles className="w-7 h-7 text-white" />
+          </motion.div>
+          <span className="text-3xl font-bold text-slate-900">{Math.round(progress)}%</span>
+        </div>
+      </div>
+
+      {/* Status Text */}
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="text-center"
+      >
+        <h2 className="text-xl font-bold text-slate-900 mb-2">Scanning Portfolio</h2>
+        <motion.p 
+          key={currentChain}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-slate-500"
+        >
+          Analyzing <span className="font-semibold text-indigo-600">{currentChain}</span>...
+        </motion.p>
+        <p className="text-sm text-slate-400 mt-1">
+          Chain {Math.min(Math.ceil((progress / 100) * totalChains), totalChains)} of {totalChains}
+        </p>
+      </motion.div>
+
+      {/* Chain Progress Dots */}
+      <div className="flex gap-2 mt-6">
+        {Array.from({ length: totalChains }).map((_, i) => {
+          const isActive = i < Math.ceil((progress / 100) * totalChains);
+          return (
+            <motion.div
+              key={i}
+              initial={{ scale: 0.8 }}
+              animate={{ 
+                scale: isActive ? 1 : 0.8,
+                backgroundColor: isActive ? '#6366F1' : '#E2E8F0'
+              }}
+              className="w-2 h-2 rounded-full"
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Empty State Component
+ */
+export function EmptyState({
+  icon,
+  title,
+  description,
+  action
+}: {
+  icon?: React.ReactNode;
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col items-center justify-center py-16 px-4 text-center"
+    >
+      {icon && (
+        <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+          {icon}
+        </div>
+      )}
+      <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
+      {description && (
+        <p className="text-slate-500 max-w-sm mb-6">{description}</p>
+      )}
+      {action}
+    </motion.div>
+  );
+}
+
+/**
+ * Error State Component
+ */
 export function ErrorState({
   title = 'Something went wrong',
-  description = 'Please try again or contact support if the problem persists.',
-  onRetry,
+  message,
+  onRetry
 }: {
   title?: string;
-  description?: string;
+  message?: string;
   onRetry?: () => void;
 }) {
   return (
-    <motion.div
+    <motion.div 
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="flex flex-col items-center justify-center py-12 px-4 text-center"
+      className="flex flex-col items-center justify-center py-16 px-4 text-center"
     >
-      <div className="w-16 h-16 rounded-2xl bg-red-100 flex items-center justify-center mb-4">
-        <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mb-4">
+        <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
       </div>
       <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
-      <p className="text-sm text-slate-500 max-w-sm mb-6">{description}</p>
+      {message && (
+        <p className="text-slate-500 max-w-sm mb-6">{message}</p>
+      )}
       {onRetry && (
         <button
           onClick={onRetry}
-          className="px-6 py-2.5 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 transition-colors"
+          className="px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-medium transition-colors"
         >
           Try Again
         </button>
@@ -303,14 +288,66 @@ export function ErrorState({
   );
 }
 
-export default { 
-  Skeleton, 
-  TokenCardSkeleton, 
-  TokenListSkeleton, 
-  StatsCardSkeleton, 
-  DashboardSkeleton,
-  ScanLoadingAnimation,
-  ConsolidationProgress,
-  EmptyState,
-  ErrorState,
-};
+/**
+ * Success Animation
+ */
+export function SuccessAnimation({ 
+  message = 'Success!' 
+}: { 
+  message?: string 
+}) {
+  return (
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.5 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="flex flex-col items-center justify-center py-8"
+    >
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+        className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mb-4"
+      >
+        <motion.svg 
+          className="w-10 h-10 text-emerald-600" 
+          fill="none" 
+          viewBox="0 0 24 24" 
+          stroke="currentColor"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+        >
+          <motion.path 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            strokeWidth={2.5} 
+            d="M5 13l4 4L19 7"
+          />
+        </motion.svg>
+      </motion.div>
+      <motion.p 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="text-lg font-semibold text-slate-900"
+      >
+        {message}
+      </motion.p>
+    </motion.div>
+  );
+}
+
+/**
+ * Shimmer Effect Component
+ */
+export function Shimmer({ className = '' }: { className?: string }) {
+  return (
+    <div className={`relative overflow-hidden ${className}`}>
+      <motion.div
+        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent"
+        animate={{ x: ['-100%', '100%'] }}
+        transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+      />
+    </div>
+  );
+}
