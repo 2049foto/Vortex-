@@ -50,7 +50,7 @@ const getConnectors = () => {
   // Always use the same origin to prevent verification errors
   const appUrl = typeof window !== 'undefined' 
     ? window.location.origin 
-    : (process.env.NEXT_PUBLIC_APP_URL || 'https://dust-sweeper-yrjq.vercel.app');
+    : (process.env.NEXT_PUBLIC_APP_URL || 'https://vortexbase.vercel.app');
   
   // Ensure URL is consistent and doesn't include trailing slash
   const cleanUrl = appUrl.replace(/\/$/, '');

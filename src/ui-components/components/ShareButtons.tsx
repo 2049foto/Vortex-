@@ -40,7 +40,7 @@ interface ShareButtonsProps {
 
 export function ShareButtons({ type, data, walletAddress }: ShareButtonsProps) {
   const [copied, setCopied] = useState(false);
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://dust-sweeper-yrjq.vercel.app';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://vortexbase.vercel.app';
 
   // Generate share text based on type
   const generateShareText = useCallback(() => {

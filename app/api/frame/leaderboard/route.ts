@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       { rank: 5, address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', dustCleaned: 321.09, xp: 3200 },
     ];
 
-    const imageUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://dust-sweeper-yrjq.vercel.app'}/api/og/leaderboard?` +
+    const imageUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://vortexbase.vercel.app'}/api/og/leaderboard?` +
       new URLSearchParams({
         period,
         users: JSON.stringify(mockUsers),

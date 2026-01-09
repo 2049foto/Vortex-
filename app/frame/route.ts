@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://dust-sweeper-yrjq.vercel.app';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vortexbase.vercel.app';
 
 export async function GET(request: NextRequest) {
   // Return initial frame HTML with enhanced viral features
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     <!-- Open Graph -->
     <meta property="og:image" content="${APP_URL}/api/og/frame-intro" />
     <meta property="og:title" content="Vortex Protocol 🌀 Clean Your Crypto Dust" />
-    <meta property="og:description" content="Find and clean dust tokens across 10 chains. Gasless on Base. Free forever." />
+    <meta property="og:description" content="Find and clean dust tokens across 11 chains. Gasless on Base. Free forever." />
     <meta property="og:url" content="${APP_URL}" />
     <meta property="og:type" content="website" />
     
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     <h1>🌀 Vortex Protocol</h1>
     <p style="font-size: 18px; color: #94A3B8;">Premium Portfolio Hygiene Engine</p>
     <ul style="text-align: left; max-width: 400px; margin: 20px auto; color: #A5B4FC;">
-      <li>🔍 Scan wallets across 10 chains</li>
+      <li>🔍 Scan wallets across 11 chains</li>
       <li>🧹 Clean dust tokens in one click</li>
       <li>⛽ Gasless swaps on Base</li>
       <li>🛡️ 20-layer risk analysis</li>

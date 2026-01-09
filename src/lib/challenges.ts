@@ -181,7 +181,7 @@ Join me 👇`;
  * Generate referral link
  */
 export function generateReferralLink(userId: string): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://dust-sweeper-yrjq.vercel.app';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://vortexbase.vercel.app';
   return `${appUrl}/scan?ref=${userId}`;
 }
 

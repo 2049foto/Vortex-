@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://dust-sweeper-yrjq.vercel.app';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vortexbase.vercel.app';
 
 export async function POST(request: NextRequest) {
   try {
@@ -65,7 +65,7 @@ function generateScanPromptFrame() {
 </head>
 <body>
   <h1>Vortex Protocol - Dust Sweeper</h1>
-  <p>Scan your wallet to find and clean dust tokens across 10 chains!</p>
+  <p>Scan your wallet to find and clean dust tokens across 11 chains!</p>
 </body>
 </html>`;
 
