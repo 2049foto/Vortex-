@@ -19,9 +19,19 @@ function log(level: 'info' | 'warn' | 'error', message: string, data?: any) {
   }
 }
 
+// Overall timeout for serverless function (Vercel limit is 10s for hobby, 60s for pro)
+const OVERALL_TIMEOUT = 25000; // 25 seconds
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   log('info', '=== Scan API Request Started ===');
+  
+  // Create timeout promise
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error('Scan timeout - please try again'));
+    }, OVERALL_TIMEOUT);
+  });
   
   try {
     // Parse request body
@@ -82,10 +92,16 @@ export async function POST(request: NextRequest) {
 
       // Step 1: Scan wallet for tokens with optional Solana
       log('info', 'Starting wallet scan...', { walletAddress, chainIds, includeSolana });
-      const tokens = await scanWallet(walletAddress, chainIds, {
-        includeSolana,
-        solanaAddress: solanaAddress || undefined,
-      });
+      
+      // Race with timeout
+      const tokens = await Promise.race([
+        scanWallet(walletAddress, chainIds, {
+          includeSolana,
+          solanaAddress: solanaAddress || undefined,
+        }),
+        timeoutPromise,
+      ]);
+      
       log('info', `Scan complete. Found ${tokens.length} tokens in ${Date.now() - startTime}ms`);
 
       if (tokens.length === 0) {
@@ -109,15 +125,26 @@ export async function POST(request: NextRequest) {
       }
 
       // Step 2: Calculate risk scores (using V2 with all 12 layers)
-      log('info', 'Calculating risk scores...');
+      // Race with remaining time (leave 3s buffer for response)
+      const remainingTime = OVERALL_TIMEOUT - (Date.now() - startTime) - 3000;
+      log('info', `Calculating risk scores... (${remainingTime}ms remaining)`);
+      
       let riskScores: Map<string, any> = new Map();
       try {
-        riskScores = await batchCalculateRiskScoresV2(tokens);
+        const riskTimeout = new Promise<Map<string, any>>((_, reject) => {
+          setTimeout(() => reject(new Error('Risk scoring timeout')), Math.max(remainingTime, 5000));
+        });
+        
+        riskScores = await Promise.race([
+          batchCalculateRiskScoresV2(tokens),
+          riskTimeout,
+        ]);
         log('info', `Risk scores calculated for ${riskScores.size} tokens`);
       } catch (riskError) {
-        log('warn', 'Risk scoring failed, using defaults', { 
+        log('warn', 'Risk scoring failed/timeout, using value-based classification', { 
           error: riskError instanceof Error ? riskError.message : 'unknown' 
         });
+        // Continue without risk scores - will use value-based tier classification
       }
 
       // Step 3: Merge tokens with risk data

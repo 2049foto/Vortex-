@@ -390,19 +390,75 @@ async function getNativeTokenPrice(chainId: number): Promise<number> {
 
 /**
  * MAINNET CHAIN IDS ONLY - No testnets
- * 10 EVM Chains + Solana = 11 total chains
+ * Prioritized by speed and popularity
  */
-const MAINNET_CHAIN_IDS = [
-  1,      // Ethereum Mainnet
-  8453,   // Base Mainnet  
+const FAST_CHAINS = [
+  8453,   // Base Mainnet (priority for Base grant)
   42161,  // Arbitrum One Mainnet
   10,     // Optimism Mainnet
   137,    // Polygon Mainnet
+];
+
+const SLOW_CHAINS = [
+  1,      // Ethereum Mainnet (often slower/more expensive)
   56,     // BNB Smart Chain Mainnet
   43114,  // Avalanche C-Chain Mainnet
   324,    // zkSync Era Mainnet
-  838592, // Monad Mainnet
 ];
+
+const MAINNET_CHAIN_IDS = [...FAST_CHAINS, ...SLOW_CHAINS];
+
+/**
+ * Internal function to scan a single chain
+ */
+async function scanSingleChainInternal(
+  walletAddress: string,
+  chainId: number
+): Promise<TokenHolding[]> {
+  try {
+    logger.info({ chainId, walletAddress: walletAddress.slice(0, 10) }, `Starting scan for chain ${chainId}`);
+    
+    // Fetch native + ERC20 tokens in parallel
+    const [native, erc20] = await Promise.allSettled([
+      fetchNativeBalance(walletAddress, chainId),
+      fetchTokensViaMoralis(walletAddress, chainId),
+    ]);
+
+    const tokens: TokenHolding[] = [];
+
+    if (native.status === 'fulfilled' && native.value) {
+      const nativeBalance = parseFloat(native.value.balanceFormatted);
+      if (nativeBalance > 0) {
+        tokens.push(native.value);
+        logger.debug({ chainId, nativeBalance }, `Found native balance`);
+      }
+    }
+
+    if (erc20.status === 'fulfilled') {
+      tokens.push(...erc20.value);
+      logger.debug({ chainId, count: erc20.value.length }, `Found ERC20 tokens`);
+    } else {
+      // Try Alchemy as fallback (non-blocking)
+      try {
+        const alchemyTokens = await Promise.race([
+          fetchTokensViaAlchemy(walletAddress, chainId),
+          new Promise<TokenHolding[]>((resolve) => setTimeout(() => resolve([]), 3000)),
+        ]);
+        if (alchemyTokens.length > 0) {
+          tokens.push(...alchemyTokens);
+        }
+      } catch (e) {
+        // Ignore fallback errors
+      }
+    }
+
+    logger.info({ chainId, totalTokens: tokens.length }, `Chain ${chainId} scan complete`);
+    return tokens;
+  } catch (error) {
+    logger.error({ chainId, error }, `Chain ${chainId} scan error`);
+    return [];
+  }
+}
 
 /**
  * Scan wallet across all supported MAINNET chains (10 EVM + Solana)
@@ -434,74 +490,50 @@ export async function scanWallet(
     includeSolana: options?.includeSolana 
   }, 'Scanning wallet across chains');
 
-  // Fetch EVM tokens from all chains in parallel
+  // Per-chain timeout (8 seconds max per chain)
+  const CHAIN_TIMEOUT = 8000;
+  
+  const scanChainWithTimeout = async (chainId: number): Promise<TokenHolding[]> => {
+    return Promise.race([
+      scanSingleChainInternal(walletAddress, chainId),
+      new Promise<TokenHolding[]>((resolve) => {
+        setTimeout(() => {
+          logger.warn({ chainId }, `Chain ${chainId} timeout, skipping`);
+          resolve([]);
+        }, CHAIN_TIMEOUT);
+      }),
+    ]);
+  };
+
+  // Fetch EVM tokens from all chains in parallel with timeout
   const evmResults = await Promise.allSettled(
-    finalChains.map(async (chainId) => {
-      try {
-        logger.info({ chainId, walletAddress }, `Starting scan for chain ${chainId}`);
-        
-        // Fetch native + ERC20 tokens
-        const [native, erc20] = await Promise.allSettled([
-          fetchNativeBalance(walletAddress, chainId),
-          fetchTokensViaMoralis(walletAddress, chainId),
-        ]);
-
-        const tokens: TokenHolding[] = [];
-
-        if (native.status === 'fulfilled' && native.value) {
-          const nativeBalance = parseFloat(native.value.balanceFormatted);
-          if (nativeBalance > 0) {
-            tokens.push(native.value);
-            logger.info({ chainId, nativeBalance }, `Found native balance for chain ${chainId}`);
-          }
-        } else if (native.status === 'rejected') {
-          logger.warn({ chainId, error: native.reason }, `Native balance fetch failed for chain ${chainId}`);
-        }
-
-        if (erc20.status === 'fulfilled') {
-          const erc20Count = erc20.value.length;
-          tokens.push(...erc20.value);
-          logger.info({ chainId, erc20Count }, `Found ${erc20Count} ERC20 tokens for chain ${chainId}`);
-        } else if (erc20.status === 'rejected') {
-          logger.warn({ chainId, error: erc20.reason }, `ERC20 fetch failed for chain ${chainId}, trying Alchemy fallback`);
-          // Try Alchemy as fallback
-          try {
-            const alchemyTokens = await fetchTokensViaAlchemy(walletAddress, chainId);
-            if (alchemyTokens.length > 0) {
-              tokens.push(...alchemyTokens);
-              logger.info({ chainId, alchemyCount: alchemyTokens.length }, `Alchemy fallback found ${alchemyTokens.length} tokens`);
-            }
-          } catch (alchemyError) {
-            logger.error({ chainId, error: alchemyError }, `Alchemy fallback also failed`);
-          }
-        }
-
-        logger.info({ chainId, totalTokens: tokens.length }, `Chain ${chainId} scan complete`);
-        return tokens;
-      } catch (error) {
-        logger.error({ chainId, error }, `Chain ${chainId} scan error`);
-        return [];
-      }
-    })
+    finalChains.map(scanChainWithTimeout)
   );
 
-  // Flatten EVM results and log details
+  // Flatten EVM results
   const allTokens: TokenHolding[] = [];
+  let successfulChains = 0;
+  
   evmResults.forEach((result, index) => {
     if (result.status === 'fulfilled') {
       const chainTokens = result.value;
       allTokens.push(...chainTokens);
-      logger.info({ 
-        chainId: finalChains[index], 
-        tokensFound: chainTokens.length 
-      }, `Chain ${finalChains[index]} completed`);
+      successfulChains++;
+      if (chainTokens.length > 0) {
+        logger.info({ 
+          chainId: finalChains[index], 
+          tokensFound: chainTokens.length 
+        }, `Chain completed`);
+      }
     } else {
-      logger.error({ 
+      logger.warn({ 
         chainId: finalChains[index], 
-        error: result.reason 
-      }, `Chain ${finalChains[index]} failed`);
+        error: result.reason?.message || 'unknown'
+      }, `Chain failed`);
     }
   });
+  
+  logger.info({ successfulChains, totalChains: finalChains.length }, 'Chain scan summary');
 
   // Fetch Solana tokens if requested
   if (options?.includeSolana && options.solanaAddress) {

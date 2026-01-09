@@ -1044,23 +1044,74 @@ function calculateLayer20MLAnomaly(
 }
 
 /**
- * Batch calculate risk scores
+ * Batch calculate risk scores with concurrency limit
+ * Max 5 concurrent API calls to prevent timeout
  */
 export async function batchCalculateRiskScoresV2(
   tokens: TokenHolding[]
 ): Promise<Map<string, RiskResult>> {
-  const results = await Promise.allSettled(
-    tokens.map((token) => calculateRiskScoreV2(token))
-  );
-
   const scoreMap = new Map<string, RiskResult>();
   
-  tokens.forEach((token, index) => {
-    const result = results[index];
-    if (result.status === 'fulfilled') {
-      scoreMap.set(`${token.chainId}:${token.address}`, result.value);
-    }
-  });
+  // Limit to 30 tokens max for performance
+  const limitedTokens = tokens.slice(0, 30);
+  
+  // Process in batches of 5 concurrent requests
+  const BATCH_SIZE = 5;
+  
+  for (let i = 0; i < limitedTokens.length; i += BATCH_SIZE) {
+    const batch = limitedTokens.slice(i, i + BATCH_SIZE);
+    
+    const results = await Promise.allSettled(
+      batch.map((token) => 
+        Promise.race([
+          calculateRiskScoreV2(token),
+          // 3 second timeout per token
+          new Promise<RiskResult>((_, reject) => 
+            setTimeout(() => reject(new Error('Risk score timeout')), 3000)
+          )
+        ])
+      )
+    );
+
+    batch.forEach((token, index) => {
+      const result = results[index];
+      if (result.status === 'fulfilled') {
+        scoreMap.set(`${token.chainId}:${token.address}`, result.value);
+      } else {
+        // Use fallback for failed tokens
+        const fallbackTier: TokenTier = token.valueUsd < 0.1 ? 'MICRODUST' : 
+                                        token.valueUsd < 10 ? 'DUST' : 'LEGIT';
+        scoreMap.set(`${token.chainId}:${token.address}`, {
+          riskScore0to100: 0,
+          tier: fallbackTier,
+          confidence0to1: 0,
+          layers: {},
+          explanation: 'Risk analysis unavailable - using value-based classification',
+        });
+      }
+    });
+  }
+  
+  // For remaining tokens (>30), use simple value-based classification
+  if (tokens.length > 30) {
+    tokens.slice(30).forEach((token) => {
+      const fallbackTier: TokenTier = token.valueUsd < 0.1 ? 'MICRODUST' : 
+                                      token.valueUsd < 10 ? 'DUST' : 'LEGIT';
+      scoreMap.set(`${token.chainId}:${token.address}`, {
+        riskScore0to100: 0,
+        tier: fallbackTier,
+        confidence0to1: 0,
+        layers: {},
+        explanation: 'Using value-based classification (batch limit)',
+      });
+    });
+  }
+
+  logger.info({ 
+    total: tokens.length, 
+    scored: scoreMap.size,
+    withFullAnalysis: limitedTokens.length
+  }, 'Batch risk scoring complete');
 
   return scoreMap;
 }

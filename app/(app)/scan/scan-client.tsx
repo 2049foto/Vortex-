@@ -87,52 +87,75 @@ const TIERS = {
 // API INTEGRATION
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const SCAN_TIMEOUT = 25000; // 25 seconds max
+
 async function scanWalletAPI(walletAddress: string): Promise<ScanResult> {
-  const response = await fetch('/api/v1/scan', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      walletAddress,
-      chainIds: [8453, 1, 42161, 10, 137, 56, 43114, 324, 838592],
-      includeSolana: false,
-    }),
-  });
+  // Create abort controller with timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), SCAN_TIMEOUT);
 
-  const data = await response.json();
+  try {
+    const response = await fetch('/api/v1/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        walletAddress,
+        chainIds: [8453, 1, 42161, 10, 137, 56, 43114, 324],
+        includeSolana: false,
+      }),
+      signal: controller.signal,
+    });
 
-  if (!data.success) {
-    throw new Error(data.error || data.message || 'Scan failed');
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Server error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || data.message || 'Scan failed');
+    }
+
+    // Transform API response
+    const apiTokens = data.data?.tokens || [];
+    const tokens: Token[] = apiTokens.map((t: any) => ({
+      id: `${t.chainId}-${t.address}`,
+      symbol: t.symbol || 'UNKNOWN',
+      name: t.name || 'Unknown Token',
+      address: t.address,
+      chainId: t.chainId,
+      chainName: CHAINS[t.chainId]?.name || 'Unknown',
+      balance: t.balanceFormatted || t.balance || '0',
+      balanceUsd: t.valueUsd || 0,
+      logo: t.logoUrl,
+      tier: t.tier || 'DUST',
+      riskScore: t.riskScore || 0,
+      reasons: t.reasons || [],
+    }));
+
+    const dustTokens = tokens.filter(t => t.tier === 'DUST' || t.tier === 'MICRODUST');
+    const summary = data.data?.summary || { byTier: { LEGIT: 0, DUST: 0, MICRODUST: 0, RISK: 0 } };
+
+    return {
+      wallet: walletAddress,
+      totalValue: tokens.reduce((sum, t) => sum + t.balanceUsd, 0),
+      dustValue: dustTokens.reduce((sum, t) => sum + t.balanceUsd, 0),
+      tokens,
+      chainsScanned: Object.keys(CHAINS).length,
+      scanTime: 0,
+      summary,
+    };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Scan timed out. Please try again with fewer chains.');
+    }
+    throw error;
   }
-
-  // Transform API response
-  const apiTokens = data.data?.tokens || [];
-  const tokens: Token[] = apiTokens.map((t: any) => ({
-    id: `${t.chainId}-${t.address}`,
-    symbol: t.symbol || 'UNKNOWN',
-    name: t.name || 'Unknown Token',
-    address: t.address,
-    chainId: t.chainId,
-    chainName: CHAINS[t.chainId]?.name || 'Unknown',
-    balance: t.balanceFormatted || t.balance || '0',
-    balanceUsd: t.valueUsd || 0,
-    logo: t.logoUrl,
-    tier: t.tier || 'DUST',
-    riskScore: t.riskScore || 0,
-    reasons: t.reasons || [],
-  }));
-
-  const dustTokens = tokens.filter(t => t.tier === 'DUST' || t.tier === 'MICRODUST');
-  const summary = data.data?.summary || { byTier: { LEGIT: 0, DUST: 0, MICRODUST: 0, RISK: 0 } };
-
-  return {
-    wallet: walletAddress,
-    totalValue: tokens.reduce((sum, t) => sum + t.balanceUsd, 0),
-    dustValue: dustTokens.reduce((sum, t) => sum + t.balanceUsd, 0),
-    tokens,
-    chainsScanned: Object.keys(CHAINS).length,
-    scanTime: 0,
-    summary,
-  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -458,51 +481,71 @@ export default function ScanClient() {
     
     const startTime = Date.now();
     const chainNames = Object.values(CHAINS).map(c => c.name);
+    let progressIntervalId: NodeJS.Timeout | null = null;
     
-    // Progress animation
-    let progress = 0;
-    const progressInterval = setInterval(() => {
-      progress = Math.min(progress + Math.random() * 12, 92);
-      setScanProgress(Math.floor(progress));
-      
-      // Show random chain being scanned
-      const randomChain = chainNames[Math.floor(Math.random() * chainNames.length)];
-      setCurrentChain(randomChain);
-    }, 300);
+    // Create a promise that we can resolve/reject
+    const scanPromise = async () => {
+      // Progress animation - smoother with max 95%
+      let progress = 0;
+      progressIntervalId = setInterval(() => {
+        // Slower progress that never reaches 100%
+        const increment = progress < 50 ? 8 : progress < 80 ? 4 : 1;
+        progress = Math.min(progress + Math.random() * increment, 95);
+        setScanProgress(Math.floor(progress));
+        
+        // Show random chain being scanned
+        const randomChain = chainNames[Math.floor(Math.random() * chainNames.length)];
+        setCurrentChain(randomChain);
+      }, 250);
+
+      try {
+        const result = await scanWalletAPI(addr);
+        
+        if (progressIntervalId) {
+          clearInterval(progressIntervalId);
+          progressIntervalId = null;
+        }
+        
+        // Animate to 100%
+        setScanProgress(100);
+        setCurrentChain(undefined);
+        
+        result.scanTime = Date.now() - startTime;
+        setScanResult(result);
+        
+        // Auto-select consolidatable tokens (DUST + MICRODUST, not RISK)
+        const consolidatable = result.tokens.filter(
+          t => (t.tier === 'DUST' || t.tier === 'MICRODUST') && t.riskScore < 70
+        );
+        setSelectedTokens(new Set(consolidatable.map(t => t.id)));
+        
+        if (result.tokens.length > 0) {
+          toastSuccess(
+            'Scan Complete',
+            `Found ${result.tokens.length} tokens across ${result.chainsScanned} chains`
+          );
+        }
+        
+      } catch (error) {
+        if (progressIntervalId) {
+          clearInterval(progressIntervalId);
+          progressIntervalId = null;
+        }
+        setScanProgress(0);
+        setCurrentChain(undefined);
+        
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        setScanError(errorMessage);
+        toastError('Scan Failed', errorMessage);
+      }
+    };
 
     try {
-      const result = await scanWalletAPI(addr);
-      
-      clearInterval(progressInterval);
-      setScanProgress(100);
-      setCurrentChain(undefined);
-      
-      result.scanTime = Date.now() - startTime;
-      setScanResult(result);
-      
-      // Auto-select consolidatable tokens (DUST + MICRODUST, not RISK)
-      const consolidatable = result.tokens.filter(
-        t => (t.tier === 'DUST' || t.tier === 'MICRODUST') && t.riskScore < 70
-      );
-      setSelectedTokens(new Set(consolidatable.map(t => t.id)));
-      
-      if (result.tokens.length > 0) {
-        toastSuccess(
-          'Scan Complete',
-          `Found ${result.tokens.length} tokens across ${result.chainsScanned} chains`
-        );
-      }
-      
-    } catch (error) {
-      clearInterval(progressInterval);
-      setScanProgress(0);
-      setCurrentChain(undefined);
-      
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      setScanError(errorMessage);
-      toastError('Scan Failed', errorMessage);
-      
+      await scanPromise();
     } finally {
+      if (progressIntervalId) {
+        clearInterval(progressIntervalId);
+      }
       setIsScanning(false);
     }
   }, [walletAddress, toastError, toastSuccess]);
