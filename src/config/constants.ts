@@ -25,31 +25,35 @@ export const TIER_THRESHOLDS = {
 } as const;
 
 // ============================================
-// RISK LAYER WEIGHTS (Phase 1.1 - 12 layers)
+// RISK LAYER WEIGHTS (Phase 1.1 - 12 core layers + 8 advanced)
+// NORMALIZED: All weights sum to exactly 1.00 (100%)
 // ============================================
-export const RISK_LAYER_WEIGHTS = {
-  layer1_audit: 0.10, // 10%
-  layer2_concentration: 0.12, // 12%
-  layer3_honeypot: 0.15, // 15%
-  layer4_rugpull: 0.12, // 12%
-  layer5_dev_wallet: 0.08, // 8%
-  layer6_sentiment: 0.07, // 7%
-  layer7_volume_trend: 0.08, // 8%
-  layer8_cex_listings: 0.10, // 10%
-  layer9_liquidity: 0.10, // 10%
-  layer10_volatility: 0.05, // 5%
-  layer11_age: 0.03, // 3%
-  layer12_social: 0.00, // 0% (bonus)
-  // Phase 1.2 - Advanced layers
-  layer13_flash_loan: 0.08, // 8%
-  layer14_bridge_risk: 0.07, // 7%
-  layer15_insider_trading: 0.06, // 6%
-  layer16_regulatory: 0.05, // 5%
-  layer17_validator_centralization: 0.06, // 6%
-  layer18_composability: 0.05, // 5%
-  layer19_exploit_history: 0.08, // 8%
-  layer20_ml_anomaly: 0.08, // 8%
-} as const;
+export const RISK_LAYER_WEIGHTS: Record<string, number> = {
+  // Phase 1.1 - Core Layers (73% total)
+  layer1_audit: 0.07,           // 7% - Contract verification & audit status
+  layer2_concentration: 0.09,   // 9% - Holder concentration risk
+  layer3_honeypot: 0.12,        // 12% - Honeypot detection (critical)
+  layer4_rugpull: 0.09,         // 9% - Rug pull indicators
+  layer5_dev_wallet: 0.06,      // 6% - Developer wallet exposure
+  layer6_sentiment: 0.05,       // 5% - Community sentiment
+  layer7_volume_trend: 0.06,    // 6% - Trading volume analysis
+  layer8_cex_listings: 0.05,    // 5% - Exchange listings
+  layer9_liquidity: 0.08,       // 8% - Liquidity depth
+  layer10_volatility: 0.04,     // 4% - Price volatility
+  layer11_age: 0.02,            // 2% - Contract age
+  layer12_social: 0.00,         // 0% - Social verification (bonus only)
+  
+  // Phase 1.2 - Advanced Layers (27% total)
+  layer13_flash_loan: 0.05,     // 5% - Flash loan vulnerability
+  layer14_bridge_risk: 0.04,    // 4% - Cross-chain bridge risk
+  layer15_insider_trading: 0.04,// 4% - Insider trading signals
+  layer16_regulatory: 0.03,     // 3% - Regulatory compliance
+  layer17_validator_centralization: 0.03, // 3% - Validator risk (Solana)
+  layer18_composability: 0.03,  // 3% - DeFi composability risk
+  layer19_exploit_history: 0.03,// 3% - Historical exploits
+  layer20_ml_anomaly: 0.02,     // 2% - ML anomaly detection
+};
+// Total: 7+9+12+9+6+5+6+5+8+4+2+0 + 5+4+4+3+3+3+3+2 = 100%
 
 // ============================================
 // SUPPORTED CHAINS (Phase 1)

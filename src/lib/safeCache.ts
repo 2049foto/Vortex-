@@ -11,18 +11,38 @@ import { CACHE_TTL } from '../config/constants';
 const logger = createLogger('cache');
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MEMORY CACHE - Always available fallback
+// MEMORY CACHE - LRU with max size limit
 // ═══════════════════════════════════════════════════════════════════════════════
+
+const MAX_MEMORY_CACHE_SIZE = 1000; // Maximum entries to prevent unbounded growth
+const LRU_EVICTION_COUNT = 100;      // Number of entries to evict when full
 
 interface MemoryCacheEntry {
   value: any;
   expiresAt: number;
+  lastAccessed: number; // For LRU tracking
 }
 
 const memoryCache = new Map<string, MemoryCacheEntry>();
 
-// Clean expired entries periodically
+// Clean expired entries and enforce size limit
 let cleanupInterval: NodeJS.Timeout | null = null;
+
+function evictLRU() {
+  if (memoryCache.size <= MAX_MEMORY_CACHE_SIZE) return;
+  
+  // Convert to array and sort by lastAccessed (oldest first)
+  const entries = Array.from(memoryCache.entries())
+    .sort((a, b) => a[1].lastAccessed - b[1].lastAccessed);
+  
+  // Evict oldest entries
+  const toEvict = Math.min(LRU_EVICTION_COUNT, entries.length - MAX_MEMORY_CACHE_SIZE);
+  for (let i = 0; i < toEvict; i++) {
+    memoryCache.delete(entries[i][0]);
+  }
+  
+  logger.debug({ evicted: toEvict, remaining: memoryCache.size }, 'LRU eviction');
+}
 
 function startCleanupInterval() {
   if (cleanupInterval) return;
@@ -31,12 +51,16 @@ function startCleanupInterval() {
     const now = Date.now();
     let cleaned = 0;
     
+    // Clean expired entries
     for (const [key, entry] of memoryCache.entries()) {
       if (entry.expiresAt < now) {
         memoryCache.delete(key);
         cleaned++;
       }
     }
+    
+    // Enforce size limit
+    evictLRU();
     
     if (cleaned > 0) {
       logger.debug({ cleaned, remaining: memoryCache.size }, 'Memory cache cleanup');
@@ -91,7 +115,12 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
   // Try memory cache first (faster)
   const memEntry = memoryCache.get(prefixedKey);
   if (memEntry && memEntry.expiresAt > Date.now()) {
+    // Update LRU timestamp
+    memEntry.lastAccessed = Date.now();
     return memEntry.value as T;
+  } else if (memEntry) {
+    // Expired - remove it
+    memoryCache.delete(prefixedKey);
   }
   
   // Try Redis
@@ -100,12 +129,14 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     if (redis) {
       const value = await redis.get(prefixedKey);
       if (value !== null && value !== undefined) {
-        // Sync to memory cache
+        // Sync to memory cache with LRU tracking
         const ttl = await redis.ttl(prefixedKey);
         if (ttl > 0) {
+          const now = Date.now();
           memoryCache.set(prefixedKey, {
             value,
-            expiresAt: Date.now() + (ttl * 1000),
+            expiresAt: now + (ttl * 1000),
+            lastAccessed: now,
           });
         }
         return typeof value === 'string' ? JSON.parse(value) : value;
@@ -131,11 +162,18 @@ export async function cacheSet(
   
   const prefixedKey = `vortex:${key}`;
   const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+  const now = Date.now();
   
-  // Always set in memory cache
+  // Enforce size limit before adding
+  if (memoryCache.size >= MAX_MEMORY_CACHE_SIZE && !memoryCache.has(prefixedKey)) {
+    evictLRU();
+  }
+  
+  // Always set in memory cache with LRU tracking
   memoryCache.set(prefixedKey, {
     value,
-    expiresAt: Date.now() + (ttlSeconds * 1000),
+    expiresAt: now + (ttlSeconds * 1000),
+    lastAccessed: now,
   });
   
   // Try Redis (non-blocking)

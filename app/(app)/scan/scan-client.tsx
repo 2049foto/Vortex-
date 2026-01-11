@@ -1236,8 +1236,10 @@ export default function ScanClient() {
           <button 
             className="btn btn-ghost btn-sm btn-icon"
             onClick={() => handleScan(scanResult?.wallet)}
+            aria-label="Refresh scan results"
+            title="Rescan wallet"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -1254,29 +1256,42 @@ export default function ScanClient() {
           className="mb-4"
         >
           {/* Selection Mode Buttons */}
-          <div className="flex gap-2 mb-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+          <div 
+            className="flex gap-2 mb-2 overflow-x-auto pb-2" 
+            style={{ scrollbarWidth: 'none' }}
+            role="group"
+            aria-label="Token selection presets"
+          >
             <button 
               className={`btn btn-sm whitespace-nowrap ${selectionMode === 'smart' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={applySmartSelect}
+              aria-pressed={selectionMode === 'smart'}
+              title="AI-optimized selection for best returns"
             >
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-4 h-4" aria-hidden="true" />
               Smart
             </button>
             <button 
               className={`btn btn-sm whitespace-nowrap ${selectionMode === 'dustOnly' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={applyDustOnly}
+              aria-pressed={selectionMode === 'dustOnly'}
+              title="Select only dust and micro-dust tokens"
             >
               Dust Only
             </button>
             <button 
               className={`btn btn-sm whitespace-nowrap ${selectionMode === 'baseOnly' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={applyBaseOnly}
+              aria-pressed={selectionMode === 'baseOnly'}
+              title="Select only tokens on Base chain (no bridging)"
             >
               Base Only
             </button>
             <button 
               className={`btn btn-sm whitespace-nowrap ${selectionMode === 'highValue' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={applyHighValue}
+              aria-pressed={selectionMode === 'highValue'}
+              title="Select dust tokens worth $1 or more"
             >
               High Value
             </button>

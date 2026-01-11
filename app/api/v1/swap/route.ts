@@ -20,9 +20,33 @@ function log(level: 'info' | 'warn' | 'error', message: string, data?: any) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { walletAddress, selectedTokens, outputToken, slippagePct, dryRun, turnstileToken } = body;
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // INPUT VALIDATION (Zod schema)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const { validateRequest, swapRequestSchema } = await import('@/middleware/validation');
+    const validation = validateRequest(swapRequestSchema, body);
+    
+    if (!validation.success) {
+      log('warn', 'Validation failed', { error: validation.error });
+      return NextResponse.json(
+        { success: false, error: validation.error },
+        { status: 400 }
+      );
+    }
+    
+    const { 
+      walletAddress, 
+      selectedTokens, 
+      outputToken = 'ETH', 
+      slippagePct = 1, 
+      dryRun = false, 
+      turnstileToken 
+    } = validation.data;
 
-    // Verify Turnstile token (bot protection) - FAIL OPEN for better UX
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BOT PROTECTION (Turnstile - Fail Open)
+    // ═══════════════════════════════════════════════════════════════════════════
     let turnstileVerified = false;
     try {
       const clientIp = request.headers.get('x-forwarded-for') || 
@@ -31,23 +55,18 @@ export async function POST(request: NextRequest) {
       await requireTurnstile(turnstileToken || '', clientIp);
       turnstileVerified = true;
     } catch (turnstileError) {
-      // Log but don't block - fail open
-      console.warn('Turnstile verification failed (allowing):', turnstileError);
+      // Log but don't block - fail open for better UX
+      log('warn', 'Turnstile verification failed (allowing)', { 
+        error: turnstileError instanceof Error ? turnstileError.message : 'unknown' 
+      });
     }
-
-    // Validate required fields
-    if (!walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid wallet address' },
-        { status: 400 }
-      );
-    }
-
-    if (!selectedTokens || selectedTokens.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'No tokens selected for consolidation' },
-        { status: 400 }
-      );
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SLIPPAGE VALIDATION (Business logic)
+    // ═══════════════════════════════════════════════════════════════════════════
+    const validatedSlippage = Math.max(0.1, Math.min(slippagePct, 10)); // Clamp 0.1-10%
+    if (validatedSlippage !== slippagePct) {
+      log('warn', 'Slippage adjusted', { original: slippagePct, adjusted: validatedSlippage });
     }
 
     try {
