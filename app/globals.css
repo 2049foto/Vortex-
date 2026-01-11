@@ -1983,3 +1983,475 @@ p { color: hsl(var(--text-secondary)); }
 .section-action:hover {
   text-decoration: underline;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SMART UX ENHANCEMENTS
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Intelligent Hover States - Visual Feedback */
+.smart-hover {
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.smart-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.smart-hover:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Selection Glow Effect */
+.selection-glow {
+  position: relative;
+}
+
+.selection-glow::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, hsl(var(--accent) / 0.3), transparent);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.selection-glow.selected::after {
+  opacity: 1;
+}
+
+/* Value Preview Tooltip */
+.value-preview {
+  position: relative;
+}
+
+.value-preview::before {
+  content: attr(data-value);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.9);
+  background: hsl(var(--bg-elevated));
+  color: hsl(var(--text-primary));
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  border: 1px solid hsl(var(--border));
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all var(--duration-fast) var(--ease);
+  z-index: 50;
+}
+
+.value-preview:hover::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) scale(1);
+}
+
+/* Tier Section Headers - Collapsible */
+.tier-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease);
+}
+
+.tier-header:hover {
+  background: hsl(var(--bg-tertiary));
+}
+
+.tier-header .tier-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tier-header .tier-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tier-header .tier-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.tier-header .tier-subtitle {
+  font-size: 12px;
+  color: hsl(var(--text-tertiary));
+}
+
+.tier-header .tier-toggle {
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+.tier-header.collapsed .tier-toggle {
+  transform: rotate(-90deg);
+}
+
+/* Smart Count Badge */
+.smart-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius-full);
+  background: hsl(var(--accent-light));
+  color: hsl(var(--accent));
+}
+
+.smart-count.success {
+  background: hsl(var(--success-light));
+  color: hsl(var(--success));
+}
+
+.smart-count.warning {
+  background: hsl(var(--warning-light));
+  color: hsl(var(--warning));
+}
+
+.smart-count.danger {
+  background: hsl(var(--danger-light));
+  color: hsl(var(--danger));
+}
+
+/* Chain Grid for Selection */
+.chain-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+@media (max-width: 380px) {
+  .chain-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.chain-grid-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border-radius: var(--radius);
+  border: 2px solid transparent;
+  background: hsl(var(--bg-elevated));
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.chain-grid-item:hover {
+  border-color: hsl(var(--border-hover));
+}
+
+.chain-grid-item.selected {
+  border-color: var(--chain-color, hsl(var(--accent)));
+  background: color-mix(in srgb, var(--chain-color, hsl(var(--accent))) 10%, transparent);
+}
+
+.chain-grid-item .chain-emoji {
+  font-size: 18px;
+  filter: grayscale(0.5);
+  transition: filter var(--duration-fast) var(--ease);
+}
+
+.chain-grid-item.selected .chain-emoji {
+  filter: none;
+}
+
+.chain-grid-item .chain-name {
+  font-size: 10px;
+  font-weight: 500;
+  color: hsl(var(--text-secondary));
+}
+
+.chain-grid-item.selected .chain-name {
+  color: var(--chain-color, hsl(var(--accent)));
+}
+
+/* Wallet Connect Card */
+.wallet-card {
+  padding: 24px;
+  text-align: center;
+  background: hsl(var(--bg-elevated));
+  border-radius: var(--radius-lg);
+  border: 1px solid hsl(var(--border));
+}
+
+.wallet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.wallet-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: hsl(var(--bg-tertiary));
+  border: 1px solid hsl(var(--border));
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.wallet-option:hover {
+  border-color: hsl(var(--accent));
+  background: hsl(var(--accent-light));
+}
+
+.wallet-option .wallet-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+}
+
+.wallet-option .wallet-info {
+  text-align: left;
+}
+
+.wallet-option .wallet-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wallet-option .wallet-label {
+  font-size: 10px;
+  color: hsl(var(--accent));
+}
+
+/* Smart Notification Pulse */
+@keyframes smart-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+}
+
+.smart-pulse {
+  animation: smart-pulse 2s ease-in-out infinite;
+}
+
+/* Amount Slider Enhancement */
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: hsl(var(--bg-tertiary));
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: hsl(var(--accent));
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(0.95);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: hsl(var(--accent));
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  border: none;
+}
+
+/* Quick Amount Buttons */
+.amount-presets {
+  display: flex;
+  gap: 4px;
+}
+
+.amount-preset {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: hsl(var(--bg-tertiary));
+  border: none;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.amount-preset:hover {
+  background: hsl(var(--bg-secondary));
+}
+
+.amount-preset.active {
+  background: hsl(var(--accent));
+  color: white;
+}
+
+/* Connected Wallet Indicator */
+.connected-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: hsl(var(--success-light));
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+
+.connected-indicator .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: hsl(var(--success));
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.connected-indicator .label {
+  font-size: 13px;
+  font-weight: 500;
+  color: hsl(var(--success));
+}
+
+.connected-indicator .address {
+  margin-left: auto;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: hsl(var(--text-secondary));
+}
+
+/* Chain Preset Buttons - Enhanced */
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.preset-button {
+  position: relative;
+  padding: 14px 10px;
+  border-radius: var(--radius);
+  background: hsl(var(--bg-tertiary));
+  border: none;
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--duration-fast) var(--ease);
+  overflow: hidden;
+}
+
+.preset-button:hover {
+  background: hsl(var(--bg-secondary));
+}
+
+.preset-button.active {
+  background: hsl(var(--accent));
+  box-shadow: var(--shadow-md);
+}
+
+.preset-button .preset-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: hsl(var(--text-primary));
+}
+
+.preset-button.active .preset-title {
+  color: white;
+}
+
+.preset-button .preset-desc {
+  font-size: 10px;
+  color: hsl(var(--text-tertiary));
+  margin-top: 2px;
+}
+
+.preset-button.active .preset-desc {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.preset-button .preset-indicator {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.5);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease);
+}
+
+.preset-button.active .preset-indicator {
+  opacity: 1;
+}
+
+/* Floating Action Insight */
+.action-insight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: hsl(var(--text-secondary));
+  background: hsl(var(--bg-tertiary));
+  border-radius: var(--radius);
+  margin-top: 8px;
+}
+
+.action-insight svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.action-insight.success {
+  background: hsl(var(--success-light));
+  color: hsl(var(--success));
+}
+
+.action-insight.warning {
+  background: hsl(var(--warning-light));
+  color: hsl(var(--warning));
+}

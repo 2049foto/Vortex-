@@ -19,9 +19,11 @@ import {
   AlertCircle,
   Info,
   Zap,
-  TrendingUp
+  TrendingUp,
+  Network
 } from 'lucide-react';
 import { useToast } from '../../providers';
+import { WalletConnectButton } from '@/components/WalletConnectButton';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -613,6 +615,256 @@ function TokenCard({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// COLLAPSIBLE TOKEN LIST BY TIER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface TokenListByTierProps {
+  tokens: Token[];
+  selectedTokens: Set<string>;
+  tokenAmounts: TokenAmounts;
+  showAmountEditor: string | null;
+  outputToken: 'ETH' | 'USDC';
+  onToggleToken: (id: string) => void;
+  onAmountChange: (id: string, amount: string) => void;
+  onToggleEditor: (id: string) => void;
+}
+
+function TokenListByTier({
+  tokens,
+  selectedTokens,
+  tokenAmounts,
+  showAmountEditor,
+  outputToken,
+  onToggleToken,
+  onAmountChange,
+  onToggleEditor,
+}: TokenListByTierProps) {
+  // Track collapsed state per tier
+  const [collapsedTiers, setCollapsedTiers] = useState<Set<string>>(new Set());
+
+  // Group tokens by tier
+  const tokensByTier = useMemo(() => {
+    const groups: Record<string, Token[]> = {
+      LEGIT: [],
+      DUST: [],
+      MICRODUST: [],
+      RISK: [],
+    };
+    
+    tokens.forEach(token => {
+      const tier = token.tier || 'DUST';
+      if (groups[tier]) {
+        groups[tier].push(token);
+      }
+    });
+    
+    return groups;
+  }, [tokens]);
+
+  const toggleTier = (tier: string) => {
+    setCollapsedTiers(prev => {
+      const next = new Set(prev);
+      if (next.has(tier)) {
+        next.delete(tier);
+      } else {
+        next.add(tier);
+      }
+      return next;
+    });
+  };
+
+  const selectAllInTier = (tier: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const tierTokens = tokensByTier[tier] || [];
+    tierTokens.forEach(token => {
+      if (!isBaseOutputToken(token, outputToken)) {
+        if (!selectedTokens.has(token.id)) {
+          onToggleToken(token.id);
+        }
+      }
+    });
+  };
+
+  const deselectAllInTier = (tier: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const tierTokens = tokensByTier[tier] || [];
+    tierTokens.forEach(token => {
+      if (selectedTokens.has(token.id)) {
+        onToggleToken(token.id);
+      }
+    });
+  };
+
+  const tierOrder: (keyof typeof TIERS)[] = ['LEGIT', 'DUST', 'MICRODUST', 'RISK'];
+  const tierColors: Record<string, string> = {
+    LEGIT: 'hsl(var(--success))',
+    DUST: 'hsl(var(--accent))',
+    MICRODUST: 'hsl(var(--warning))',
+    RISK: 'hsl(var(--danger))',
+  };
+  const tierIcons: Record<string, React.ReactNode> = {
+    LEGIT: <CheckCircle className="w-4 h-4" />,
+    DUST: <Sparkles className="w-4 h-4" />,
+    MICRODUST: <Zap className="w-4 h-4" />,
+    RISK: <AlertTriangle className="w-4 h-4" />,
+  };
+
+  let globalIndex = 0;
+
+  return (
+    <div className="space-y-4 mb-32">
+      {tierOrder.map(tier => {
+        const tierTokens = tokensByTier[tier] || [];
+        if (tierTokens.length === 0) return null;
+
+        const isCollapsed = collapsedTiers.has(tier);
+        const tierConfig = TIERS[tier];
+        const selectedInTier = tierTokens.filter(t => selectedTokens.has(t.id)).length;
+        const selectableInTier = tierTokens.filter(t => !isBaseOutputToken(t, outputToken)).length;
+        const tierValue = tierTokens.reduce((sum, t) => sum + t.balanceUsd, 0);
+
+        return (
+          <motion.div
+            key={tier}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl overflow-hidden"
+            style={{ 
+              background: 'hsl(var(--bg-elevated))',
+              border: '1px solid hsl(var(--border))',
+            }}
+          >
+            {/* Tier Header - Collapsible */}
+            <button
+              onClick={() => toggleTier(tier)}
+              className="w-full flex items-center gap-3 p-4 transition-colors hover:bg-[hsl(var(--bg-tertiary))]"
+            >
+              {/* Tier Icon */}
+              <div 
+                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: `${tierColors[tier]}15`, color: tierColors[tier] }}
+              >
+                {tierIcons[tier]}
+              </div>
+
+              {/* Tier Info */}
+              <div className="flex-1 text-left">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">{tierConfig.label}</span>
+                  <span 
+                    className="text-xs px-2 py-0.5 rounded-full"
+                    style={{ 
+                      background: `${tierColors[tier]}15`,
+                      color: tierColors[tier]
+                    }}
+                  >
+                    {tierTokens.length}
+                  </span>
+                </div>
+                <div className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                  ${tierValue.toFixed(2)} • {tierConfig.description}
+                </div>
+              </div>
+
+              {/* Selection Count & Actions */}
+              <div className="flex items-center gap-2">
+                {selectedInTier > 0 && (
+                  <span 
+                    className="text-xs font-medium px-2 py-1 rounded-lg"
+                    style={{ background: 'hsl(var(--accent-light))', color: 'hsl(var(--accent))' }}
+                  >
+                    {selectedInTier}/{selectableInTier}
+                  </span>
+                )}
+                <ChevronDown 
+                  className={`w-5 h-5 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+                  style={{ color: 'hsl(var(--text-tertiary))' }}
+                />
+              </div>
+            </button>
+
+            {/* Quick Actions Bar */}
+            <AnimatePresence>
+              {!isCollapsed && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                >
+                  <div 
+                    className="flex items-center gap-2 px-4 py-2"
+                    style={{ 
+                      background: 'hsl(var(--bg-tertiary))',
+                      borderTop: '1px solid hsl(var(--border))'
+                    }}
+                  >
+                    <button
+                      onClick={(e) => selectAllInTier(tier, e)}
+                      className="text-xs font-medium px-2 py-1 rounded-lg transition-all hover:bg-[hsl(var(--accent-light))]"
+                      style={{ color: 'hsl(var(--accent))' }}
+                    >
+                      Select All
+                    </button>
+                    {selectedInTier > 0 && (
+                      <>
+                        <span style={{ color: 'hsl(var(--border))' }}>•</span>
+                        <button
+                          onClick={(e) => deselectAllInTier(tier, e)}
+                          className="text-xs font-medium px-2 py-1 rounded-lg transition-all hover:bg-[hsl(var(--danger-light))]"
+                          style={{ color: 'hsl(var(--danger))' }}
+                        >
+                          Deselect All
+                        </button>
+                      </>
+                    )}
+                    <div className="flex-1" />
+                    <span className="text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                      {tier === 'RISK' && '⚠️ High risk tokens'}
+                      {tier === 'MICRODUST' && '💡 Very small amounts'}
+                      {tier === 'DUST' && '✨ Ready to consolidate'}
+                      {tier === 'LEGIT' && '💎 Hold or swap'}
+                    </span>
+                  </div>
+
+                  {/* Token List */}
+                  <div className="p-2 space-y-1">
+                    {tierTokens.map((token) => {
+                      const idx = globalIndex++;
+                      return (
+                        <TokenCard
+                          key={token.id}
+                          token={token}
+                          selected={selectedTokens.has(token.id)}
+                          onToggle={() => onToggleToken(token.id)}
+                          index={idx}
+                          amount={tokenAmounts[token.id] || '100'}
+                          onAmountChange={(amt) => onAmountChange(token.id, amt)}
+                          showEditor={showAmountEditor === token.id}
+                          onToggleEditor={() => onToggleEditor(token.id)}
+                          outputToken={outputToken}
+                        />
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        );
+      })}
+
+      {/* Empty State */}
+      {tokens.length === 0 && (
+        <div className="text-center py-12">
+          <Search className="w-12 h-12 mx-auto mb-3" style={{ color: 'hsl(var(--text-tertiary))' }} />
+          <p style={{ color: 'hsl(var(--text-tertiary))' }}>No tokens match your filters</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ResultsSummary({ result }: { result: ScanResult }) {
   const { summary } = result;
   
@@ -985,13 +1237,48 @@ export default function ScanClient() {
             </p>
           </motion.div>
 
+          {/* Wallet Connect Section - Show if not connected */}
+          {!isConnected && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="mb-4"
+            >
+              <WalletConnectButton variant="page" />
+              
+              <div className="flex items-center gap-3 my-4">
+                <div className="flex-1 h-px" style={{ background: 'hsl(var(--border))' }} />
+                <span className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>or scan any wallet</span>
+                <div className="flex-1 h-px" style={{ background: 'hsl(var(--border))' }} />
+              </div>
+            </motion.div>
+          )}
+
           {/* Wallet Input */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+            transition={{ delay: isConnected ? 0.1 : 0.2 }}
             className="card p-4 mb-4"
           >
+            {isConnected && (
+              <div className="flex items-center gap-2 mb-3">
+                <div 
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
+                  style={{ background: 'hsl(var(--success-light))', color: 'hsl(var(--success))' }}
+                >
+                  ✓
+                </div>
+                <span className="text-sm font-medium">Connected Wallet</span>
+                <span 
+                  className="text-xs px-2 py-0.5 rounded-full ml-auto"
+                  style={{ background: 'hsl(var(--bg-tertiary))', color: 'hsl(var(--text-tertiary))' }}
+                >
+                  {connectedAddress?.slice(0, 6)}...{connectedAddress?.slice(-4)}
+                </span>
+              </div>
+            )}
             <label htmlFor="wallet-address" className="sr-only">
               Wallet address or ENS name
             </label>
@@ -1006,7 +1293,7 @@ export default function ScanClient() {
                   id="wallet-address"
                   type="text"
                   className="input w-full pl-10"
-                  placeholder="0x... or name.eth"
+                  placeholder={isConnected ? "Using connected wallet..." : "0x... or name.eth"}
                   value={walletAddress}
                   onChange={(e) => setWalletAddress(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleScan()}
@@ -1019,111 +1306,219 @@ export default function ScanClient() {
             </div>
           </motion.div>
 
-          {/* Chain Selector */}
+          {/* Chain Selector - Enhanced */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="card p-4 mb-4"
+            transition={{ delay: isConnected ? 0.15 : 0.25 }}
+            className="card mb-4 overflow-hidden"
+            style={{ padding: 0 }}
           >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium">Chains to scan</span>
-              <span className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
-                {selectedChains.size} selected
-              </span>
+            {/* Header */}
+            <div 
+              className="flex items-center justify-between p-4 pb-3"
+              style={{ borderBottom: '1px solid hsl(var(--border))' }}
+            >
+              <div className="flex items-center gap-2">
+                <div 
+                  className="w-8 h-8 rounded-lg flex items-center justify-center"
+                  style={{ background: 'hsl(var(--accent-light))', color: 'hsl(var(--accent))' }}
+                >
+                  <Network className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-sm font-semibold">Chains to Scan</span>
+                  <div className="text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                    {chainPreset === 'base' && 'Fastest • No bridging fees'}
+                    {chainPreset === 'l2' && 'Fast • Low gas costs'}
+                    {chainPreset === 'all' && 'Complete scan • All 10 chains'}
+                  </div>
+                </div>
+              </div>
+              <div 
+                className="flex items-center gap-1 px-2 py-1 rounded-lg"
+                style={{ background: 'hsl(var(--accent-light))' }}
+              >
+                <span className="text-xs font-bold" style={{ color: 'hsl(var(--accent))' }}>
+                  {selectedChains.size}
+                </span>
+                <span className="text-[10px]" style={{ color: 'hsl(var(--accent))' }}>
+                  chain{selectedChains.size > 1 ? 's' : ''}
+                </span>
+              </div>
             </div>
             
-            {/* Quick Presets */}
-            <div className="flex gap-2 mb-3">
-              {Object.entries(CHAIN_PRESETS).map(([key, preset]) => (
-                <button
-                  key={key}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-medium transition-all ${
-                    chainPreset === key 
-                      ? 'bg-[hsl(var(--accent))] text-white shadow-md' 
-                      : 'bg-[hsl(var(--bg-tertiary))]'
-                  }`}
-                  onClick={() => {
-                    setChainPreset(key as 'base' | 'l2' | 'all');
-                    setSelectedChains(new Set(preset.chains));
-                  }}
-                >
-                  {preset.label}
-                </button>
-              ))}
+            {/* Quick Presets - Better Visual */}
+            <div className="p-3 grid grid-cols-3 gap-2">
+              {Object.entries(CHAIN_PRESETS).map(([key, preset]) => {
+                const isActive = chainPreset === key;
+                return (
+                  <motion.button
+                    key={key}
+                    whileTap={{ scale: 0.98 }}
+                    className="relative py-3 px-2 rounded-xl text-center transition-all overflow-hidden"
+                    style={{ 
+                      background: isActive ? 'hsl(var(--accent))' : 'hsl(var(--bg-tertiary))',
+                      boxShadow: isActive ? 'var(--shadow-md)' : 'none',
+                    }}
+                    onClick={() => {
+                      setChainPreset(key as 'base' | 'l2' | 'all');
+                      setSelectedChains(new Set(preset.chains));
+                    }}
+                  >
+                    <div 
+                      className="text-sm font-semibold"
+                      style={{ color: isActive ? 'white' : 'hsl(var(--text-primary))' }}
+                    >
+                      {preset.label}
+                    </div>
+                    <div 
+                      className="text-[10px] mt-0.5"
+                      style={{ color: isActive ? 'rgba(255,255,255,0.8)' : 'hsl(var(--text-tertiary))' }}
+                    >
+                      {preset.description}
+                    </div>
+                    {isActive && (
+                      <motion.div
+                        layoutId="chain-preset-indicator"
+                        className="absolute bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full"
+                        style={{ background: 'rgba(255,255,255,0.5)' }}
+                      />
+                    )}
+                  </motion.button>
+                );
+              })}
             </div>
 
-            {/* Chain Pills (Collapsed by default) */}
+            {/* Customize Toggle */}
             <button
-              className="w-full flex items-center justify-between text-xs py-2"
-              style={{ color: 'hsl(var(--text-secondary))' }}
+              className="w-full flex items-center justify-center gap-2 text-xs py-2 transition-all hover:bg-[hsl(var(--bg-tertiary))]"
+              style={{ 
+                color: 'hsl(var(--text-secondary))',
+                borderTop: '1px solid hsl(var(--border))'
+              }}
               onClick={() => setShowChainSelector(!showChainSelector)}
             >
-              <span>Customize chains</span>
+              <span>{showChainSelector ? 'Hide' : 'Customize'} chains</span>
               <ChevronDown className={`w-4 h-4 transition-transform ${showChainSelector ? 'rotate-180' : ''}`} />
             </button>
 
+            {/* Individual Chain Selection */}
             <AnimatePresence>
               {showChainSelector && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="pt-3"
-                  style={{ borderTop: '1px solid hsl(var(--border))' }}
+                  style={{ background: 'hsl(var(--bg-tertiary))' }}
                 >
-                  <div className="flex flex-wrap gap-2">
+                  <div className="p-3 grid grid-cols-4 gap-2">
                     {Object.entries(CHAINS).map(([chainId, chain]) => {
                       const id = parseInt(chainId);
                       const isSelected = selectedChains.has(id);
                       return (
-                        <button
+                        <motion.button
                           key={chainId}
-                          className={`flex items-center gap-1.5 py-1.5 px-3 rounded-full text-xs font-medium transition-all ${
-                            isSelected 
-                              ? 'shadow-sm' 
-                              : 'opacity-50'
-                          }`}
+                          whileTap={{ scale: 0.95 }}
+                          className="flex flex-col items-center gap-1 py-2 px-1 rounded-xl transition-all"
                           style={{ 
-                            background: isSelected ? `${chain.color}20` : 'hsl(var(--bg-tertiary))',
-                            border: isSelected ? `1px solid ${chain.color}` : '1px solid transparent',
-                            color: isSelected ? chain.color : 'hsl(var(--text-secondary))'
+                            background: isSelected ? `${chain.color}20` : 'hsl(var(--bg-elevated))',
+                            border: isSelected ? `2px solid ${chain.color}` : '2px solid transparent',
+                            opacity: isSelected ? 1 : 0.6
                           }}
                           onClick={() => {
                             const next = new Set(selectedChains);
                             if (next.has(id)) {
                               next.delete(id);
-                              // At least one chain required
                               if (next.size === 0) next.add(8453);
                             } else {
                               next.add(id);
                             }
                             setSelectedChains(next);
-                            setChainPreset('base'); // Reset preset on manual change
+                            // Auto-detect preset
+                            if (next.size === 1 && next.has(8453)) setChainPreset('base');
+                            else if ([8453, 42161, 10, 324].every(c => next.has(c)) && next.size === 4) setChainPreset('l2');
+                            else if (next.size === 8) setChainPreset('all');
                           }}
                         >
-                          <span>{chain.icon}</span>
-                          <span>{chain.name}</span>
-                          {isSelected && <CheckCircle className="w-3 h-3" />}
-                        </button>
+                          <div 
+                            className="text-lg"
+                            style={{ filter: isSelected ? 'none' : 'grayscale(0.5)' }}
+                          >
+                            {chain.icon}
+                          </div>
+                          <span 
+                            className="text-[10px] font-medium"
+                            style={{ color: isSelected ? chain.color : 'hsl(var(--text-secondary))' }}
+                          >
+                            {chain.name}
+                          </span>
+                          {isSelected && (
+                            <CheckCircle 
+                              className="w-3 h-3 absolute top-1 right-1" 
+                              style={{ color: chain.color }}
+                            />
+                          )}
+                        </motion.button>
                       );
                     })}
                     
-                    {/* Solana Toggle */}
-                    <button
-                      className={`flex items-center gap-1.5 py-1.5 px-3 rounded-full text-xs font-medium transition-all ${
-                        includeSolana ? 'shadow-sm' : 'opacity-50'
-                      }`}
+                    {/* Solana */}
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      className="flex flex-col items-center gap-1 py-2 px-1 rounded-xl transition-all relative"
                       style={{ 
-                        background: includeSolana ? `${SOLANA_CHAIN.color}20` : 'hsl(var(--bg-tertiary))',
-                        border: includeSolana ? `1px solid ${SOLANA_CHAIN.color}` : '1px solid transparent',
-                        color: includeSolana ? SOLANA_CHAIN.color : 'hsl(var(--text-secondary))'
+                        background: includeSolana ? `${SOLANA_CHAIN.color}20` : 'hsl(var(--bg-elevated))',
+                        border: includeSolana ? `2px solid ${SOLANA_CHAIN.color}` : '2px solid transparent',
+                        opacity: includeSolana ? 1 : 0.6
                       }}
                       onClick={() => setIncludeSolana(!includeSolana)}
                     >
-                      <span>{SOLANA_CHAIN.icon}</span>
-                      <span>{SOLANA_CHAIN.name}</span>
-                      {includeSolana && <CheckCircle className="w-3 h-3" />}
+                      <div 
+                        className="text-lg"
+                        style={{ filter: includeSolana ? 'none' : 'grayscale(0.5)' }}
+                      >
+                        {SOLANA_CHAIN.icon}
+                      </div>
+                      <span 
+                        className="text-[10px] font-medium"
+                        style={{ color: includeSolana ? SOLANA_CHAIN.color : 'hsl(var(--text-secondary))' }}
+                      >
+                        Solana
+                      </span>
+                      {includeSolana && (
+                        <CheckCircle 
+                          className="w-3 h-3 absolute top-1 right-1" 
+                          style={{ color: SOLANA_CHAIN.color }}
+                        />
+                      )}
+                    </motion.button>
+                  </div>
+                  
+                  {/* Quick Select All/None */}
+                  <div 
+                    className="flex justify-center gap-4 py-2 text-xs"
+                    style={{ borderTop: '1px solid hsl(var(--border))' }}
+                  >
+                    <button
+                      onClick={() => {
+                        setSelectedChains(new Set(Object.keys(CHAINS).map(Number)));
+                        setIncludeSolana(true);
+                        setChainPreset('all');
+                      }}
+                      style={{ color: 'hsl(var(--accent))' }}
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedChains(new Set([8453]));
+                        setIncludeSolana(false);
+                        setChainPreset('base');
+                      }}
+                      style={{ color: 'hsl(var(--text-tertiary))' }}
+                    >
+                      Base Only
                     </button>
                   </div>
                 </motion.div>
@@ -1394,23 +1789,17 @@ export default function ScanClient() {
           )}
         </AnimatePresence>
 
-        {/* Token List */}
-        <div className="space-y-2 mb-32">
-          {filteredTokens.map((token, i) => (
-            <TokenCard
-              key={token.id}
-              token={token}
-              selected={selectedTokens.has(token.id)}
-              onToggle={() => toggleToken(token.id)}
-              index={i}
-              amount={tokenAmounts[token.id] || '100'}
-              onAmountChange={(amt) => setTokenAmounts(prev => ({ ...prev, [token.id]: amt }))}
-              showEditor={showAmountEditor === token.id}
-              onToggleEditor={() => setShowAmountEditor(showAmountEditor === token.id ? null : token.id)}
-              outputToken={outputToken}
-            />
-          ))}
-        </div>
+        {/* Token List - Grouped by Tier with Collapsible Sections */}
+        <TokenListByTier
+          tokens={filteredTokens}
+          selectedTokens={selectedTokens}
+          tokenAmounts={tokenAmounts}
+          showAmountEditor={showAmountEditor}
+          outputToken={outputToken}
+          onToggleToken={toggleToken}
+          onAmountChange={(id, amt) => setTokenAmounts(prev => ({ ...prev, [id]: amt }))}
+          onToggleEditor={(id) => setShowAmountEditor(showAmountEditor === id ? null : id)}
+        />
       </div>
 
       {/* Bottom Action Bar */}
