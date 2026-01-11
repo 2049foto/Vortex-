@@ -10,7 +10,9 @@ import { getConsolidationStatus } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
-import { Check, X, Loader2, ExternalLink, ArrowRight, Share2 } from 'lucide-react';
+import { Check, X, Loader2, ExternalLink, ArrowRight, Share2, Leaf } from 'lucide-react';
+import { ShareButtons } from '@/components/ShareButtons';
+import { calculateCarbonOffset, generateCarbonImpactSummary } from '@/services/carbonService';
 
 function SuccessPageContent() {
   const searchParams = useSearchParams();
@@ -199,6 +201,34 @@ function SuccessPageContent() {
             )}
           </motion.div>
 
+          {/* Carbon Impact */}
+          {isSuccess && status.tokensConsolidated && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+              className="mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <Leaf className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <div className="font-semibold text-emerald-800">Carbon Impact</div>
+                  <div className="text-sm text-emerald-600">
+                    {generateCarbonImpactSummary(
+                      calculateCarbonOffset(
+                        status.actualGasUsd || 0,
+                        status.tokensConsolidated || 1,
+                        0
+                      )
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* Actions */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -207,14 +237,19 @@ function SuccessPageContent() {
             className="space-y-3"
           >
             {isSuccess && (
-              <Button
-                onClick={handleShare}
-                variant="outline"
-                className="w-full"
-              >
-                <Share2 className="w-4 h-4 mr-2" />
-                Share on Twitter
-              </Button>
+              <ShareButtons 
+                data={{
+                  dustCleaned: status.inputValue || 0,
+                  tokensConsolidated: status.tokensConsolidated || 0,
+                  chainsScanned: 1,
+                  outputReceived: status.outputAmount || '0',
+                  carbonSaved: calculateCarbonOffset(
+                    status.actualGasUsd || 0,
+                    status.tokensConsolidated || 1,
+                    0
+                  ).kgCO2Offset,
+                }}
+              />
             )}
             
             <div className="grid grid-cols-2 gap-3">

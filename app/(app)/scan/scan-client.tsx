@@ -142,6 +142,10 @@ export default function ScanClient() {
   // View state
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['swappable', 'burnable']));
   const [showChainDetails, setShowChainDetails] = useState(false);
+  
+  // Amount selection per token (percentage 1-100)
+  const [tokenAmounts, setTokenAmounts] = useState<Record<string, number>>({});
+  const [expandedToken, setExpandedToken] = useState<string | null>(null);
 
   // Auto-fill connected wallet
   useEffect(() => {
@@ -288,21 +292,22 @@ export default function ScanClient() {
     });
   };
 
-  // Calculate totals
+  // Calculate totals (respecting amount percentages)
   const selectedTotal = useMemo(() => {
     if (!swapSummary) return { value: 0, gas: 0, net: 0 };
     let value = 0, gas = 0;
     for (const token of swapSummary.swappableTokens) {
       if (selectedTokens.has(token.id)) {
         const analysis = tokenAnalyses.get(token.id);
+        const amountPct = (tokenAmounts[token.id] ?? 100) / 100;
         if (analysis) {
-          value += analysis.estimatedOutput;
-          gas += analysis.estimatedGasCost;
+          value += analysis.estimatedOutput * amountPct;
+          gas += analysis.estimatedGasCost; // Gas is fixed per swap
         }
       }
     }
     return { value, gas, net: value - gas };
-  }, [swapSummary, selectedTokens, tokenAnalyses]);
+  }, [swapSummary, selectedTokens, tokenAnalyses, tokenAmounts]);
 
   // Proceed to consolidate
   const handleConsolidate = () => {
@@ -313,12 +318,16 @@ export default function ScanClient() {
     
     const tokensToConsolidate = scanResult?.tokens
       .filter(t => selectedTokens.has(t.id))
-      .map(t => ({
-        ...t,
-        amountPct: 100,
-        swapBalance: t.balance,
-        swapBalanceUsd: t.balanceUsd,
-      })) || [];
+      .map(t => {
+        const amountPct = tokenAmounts[t.id] ?? 100;
+        const balanceNum = parseFloat(t.balance);
+        return {
+          ...t,
+          amountPct,
+          swapBalance: ((balanceNum * amountPct) / 100).toString(),
+          swapBalanceUsd: (t.balanceUsd * amountPct) / 100,
+        };
+      }) || [];
     
     sessionStorage.setItem('vortex_consolidation', JSON.stringify({
       wallet: scanResult?.wallet,
@@ -830,6 +839,10 @@ export default function ScanClient() {
               swapSummary.swappableTokens.forEach(t => next.delete(t.id));
               setSelectedTokens(next);
             }}
+            tokenAmounts={tokenAmounts}
+            onAmountChange={(tokenId, amount) => setTokenAmounts(prev => ({ ...prev, [tokenId]: amount }))}
+            expandedToken={expandedToken}
+            onToggleExpand={(tokenId) => setExpandedToken(expandedToken === tokenId ? null : tokenId)}
           />
         )}
 
@@ -974,6 +987,11 @@ interface TokenSectionProps {
   onDeselectAll?: () => void;
   isBurnSection?: boolean;
   isDisabled?: boolean;
+  // Amount selection
+  tokenAmounts?: Record<string, number>;
+  onAmountChange?: (tokenId: string, amount: number) => void;
+  expandedToken?: string | null;
+  onToggleExpand?: (tokenId: string) => void;
 }
 
 function TokenSection({
@@ -991,6 +1009,10 @@ function TokenSection({
   onDeselectAll,
   isBurnSection,
   isDisabled,
+  tokenAmounts,
+  onAmountChange,
+  expandedToken,
+  onToggleExpand,
 }: TokenSectionProps) {
   const selectedCount = tokens.filter(t => selectedTokens.has(t.id)).length;
   
@@ -1073,7 +1095,7 @@ function TokenSection({
             
             {/* Token List */}
             <div className="p-2">
-              {tokens.map((token, i) => (
+              {tokens.map((token) => (
                 <TokenRow
                   key={token.id}
                   token={token}
@@ -1082,6 +1104,10 @@ function TokenSection({
                   onToggle={() => onToggleToken(token.id)}
                   isBurn={isBurnSection}
                   isDisabled={isDisabled}
+                  amount={tokenAmounts?.[token.id] ?? 100}
+                  onAmountChange={onAmountChange ? (amt) => onAmountChange(token.id, amt) : undefined}
+                  isExpanded={expandedToken === token.id}
+                  onToggleExpand={onToggleExpand ? () => onToggleExpand(token.id) : undefined}
                 />
               ))}
             </div>
@@ -1103,101 +1129,204 @@ interface TokenRowProps {
   onToggle: () => void;
   isBurn?: boolean;
   isDisabled?: boolean;
+  // Amount selection
+  amount?: number;
+  onAmountChange?: (amount: number) => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
-function TokenRow({ token, analysis, selected, onToggle, isBurn, isDisabled }: TokenRowProps) {
+function TokenRow({ 
+  token, 
+  analysis, 
+  selected, 
+  onToggle, 
+  isBurn, 
+  isDisabled,
+  amount = 100,
+  onAmountChange,
+  isExpanded,
+  onToggleExpand,
+}: TokenRowProps) {
   const chain = EVM_CHAINS[token.chainId];
   const logo = token.logo || KNOWN_LOGOS[token.symbol.toUpperCase()];
+  const actualValue = (token.balanceUsd * amount) / 100;
   
   return (
-    <motion.div
-      whileTap={!isDisabled ? { scale: 0.98 } : undefined}
-      onClick={!isDisabled ? onToggle : undefined}
-      className={`flex items-center gap-3 p-3 rounded-xl mb-1 transition-all ${!isDisabled ? 'cursor-pointer' : ''}`}
-      style={{ 
-        background: selected 
-          ? isBurn ? 'hsl(var(--warning-light))' : 'hsl(var(--accent-light))'
-          : 'hsl(var(--bg-tertiary))',
-        border: selected 
-          ? `1px solid ${isBurn ? 'hsl(var(--warning) / 0.3)' : 'hsl(var(--accent) / 0.3)'}` 
-          : '1px solid transparent',
-        opacity: isDisabled ? 0.6 : 1,
-      }}
-    >
-      {/* Checkbox */}
-      {!isDisabled && (
-        <div 
-          className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 transition-all"
-          style={{ 
-            background: selected 
-              ? isBurn ? 'hsl(var(--warning))' : 'hsl(var(--accent))'
-              : 'hsl(var(--bg-elevated))',
-            border: selected ? 'none' : '2px solid hsl(var(--border))'
-          }}
-        >
-          {selected && <Check className="w-3 h-3 text-white" />}
-        </div>
-      )}
-      
-      {/* Token Icon */}
-      <div className="relative flex-shrink-0">
-        {logo ? (
-          <img 
-            src={logo} 
-            alt={token.symbol}
-            className="w-9 h-9 rounded-full"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-        ) : (
+    <div className="mb-1">
+      <motion.div
+        whileTap={!isDisabled ? { scale: 0.98 } : undefined}
+        onClick={!isDisabled ? onToggle : undefined}
+        className={`flex items-center gap-3 p-3 rounded-xl transition-all ${!isDisabled ? 'cursor-pointer' : ''}`}
+        style={{ 
+          background: selected 
+            ? isBurn ? 'hsl(var(--warning-light))' : 'hsl(var(--accent-light))'
+            : 'hsl(var(--bg-tertiary))',
+          border: selected 
+            ? `1px solid ${isBurn ? 'hsl(var(--warning) / 0.3)' : 'hsl(var(--accent) / 0.3)'}` 
+            : '1px solid transparent',
+          opacity: isDisabled ? 0.6 : 1,
+          borderRadius: isExpanded ? '12px 12px 0 0' : '12px',
+        }}
+      >
+        {/* Checkbox */}
+        {!isDisabled && (
           <div 
-            className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs"
-            style={{ background: 'hsl(var(--bg-secondary))', color: 'hsl(var(--text-secondary))' }}
+            className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 transition-all"
+            style={{ 
+              background: selected 
+                ? isBurn ? 'hsl(var(--warning))' : 'hsl(var(--accent))'
+                : 'hsl(var(--bg-elevated))',
+              border: selected ? 'none' : '2px solid hsl(var(--border))'
+            }}
           >
-            {token.symbol.slice(0, 2)}
+            {selected && <Check className="w-3 h-3 text-white" />}
           </div>
         )}
-        <div 
-          className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[8px]"
-          style={{ 
-            background: chain?.color || 'hsl(var(--bg-tertiary))',
-            border: '2px solid hsl(var(--bg-elevated))'
-          }}
-        >
-          {chain?.icon || '?'}
+        
+        {/* Token Icon */}
+        <div className="relative flex-shrink-0">
+          {logo ? (
+            <img 
+              src={logo} 
+              alt={token.symbol}
+              className="w-9 h-9 rounded-full"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          ) : (
+            <div 
+              className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs"
+              style={{ background: 'hsl(var(--bg-secondary))', color: 'hsl(var(--text-secondary))' }}
+            >
+              {token.symbol.slice(0, 2)}
+            </div>
+          )}
+          <div 
+            className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[8px]"
+            style={{ 
+              background: chain?.color || 'hsl(var(--bg-tertiary))',
+              border: '2px solid hsl(var(--bg-elevated))'
+            }}
+          >
+            {chain?.icon || '?'}
+          </div>
         </div>
-      </div>
-      
-      {/* Token Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="font-semibold text-sm truncate">{token.symbol}</span>
-          {token.riskScore >= 70 && (
-            <AlertTriangle className="w-3 h-3 flex-shrink-0" style={{ color: 'hsl(var(--warning))' }} />
+        
+        {/* Token Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-sm truncate">{token.symbol}</span>
+            {amount < 100 && selected && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'hsl(var(--accent))', color: 'white' }}>
+                {amount}%
+              </span>
+            )}
+            {token.riskScore >= 70 && (
+              <AlertTriangle className="w-3 h-3 flex-shrink-0" style={{ color: 'hsl(var(--warning))' }} />
+            )}
+          </div>
+          <div className="text-xs truncate" style={{ color: 'hsl(var(--text-tertiary))' }}>
+            {analysis?.reason || token.name}
+          </div>
+        </div>
+        
+        {/* Value & Expand Button */}
+        <div className="flex items-center gap-2">
+          <div className="text-right flex-shrink-0">
+            <div className="font-semibold text-sm">
+              ${actualValue < 0.01 ? '<0.01' : actualValue.toFixed(2)}
+              {amount < 100 && <span className="text-[10px] ml-1" style={{ color: 'hsl(var(--text-tertiary))' }}>/ ${token.balanceUsd.toFixed(2)}</span>}
+            </div>
+            {analysis && analysis.netGain > 0 && !isDisabled && (
+              <div className="text-[10px] font-medium" style={{ color: 'hsl(var(--success))' }}>
+                +${((analysis.netGain * amount) / 100).toFixed(2)} net
+              </div>
+            )}
+            {isDisabled && analysis && (
+              <div className="text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                {analysis.action === 'skip' ? 'Gas > Value' : 'Hold'}
+              </div>
+            )}
+          </div>
+          
+          {/* Expand button for amount selection */}
+          {selected && !isDisabled && onToggleExpand && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}
+              className="w-6 h-6 rounded-lg flex items-center justify-center transition-all"
+              style={{ background: 'hsl(var(--bg-elevated))' }}
+            >
+              <ChevronDown 
+                className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                style={{ color: 'hsl(var(--text-tertiary))' }}
+              />
+            </button>
           )}
         </div>
-        <div className="text-xs truncate" style={{ color: 'hsl(var(--text-tertiary))' }}>
-          {analysis?.reason || token.name}
-        </div>
-      </div>
+      </motion.div>
       
-      {/* Value */}
-      <div className="text-right flex-shrink-0">
-        <div className="font-semibold text-sm">
-          ${token.balanceUsd < 0.01 ? '<0.01' : token.balanceUsd.toFixed(2)}
-        </div>
-        {analysis && analysis.netGain > 0 && !isDisabled && (
-          <div className="text-[10px] font-medium" style={{ color: 'hsl(var(--success))' }}>
-            +${analysis.netGain.toFixed(2)} net
-          </div>
+      {/* Amount Selection Drawer */}
+      <AnimatePresence>
+        {isExpanded && selected && onAmountChange && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div 
+              className="px-4 py-3"
+              style={{ 
+                background: 'hsl(var(--bg-secondary))',
+                borderRadius: '0 0 12px 12px',
+                borderTop: '1px solid hsl(var(--border))'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-medium" style={{ color: 'hsl(var(--text-tertiary))' }}>Amount to swap:</span>
+                <span className="text-sm font-bold" style={{ color: 'hsl(var(--accent))' }}>{amount}%</span>
+              </div>
+              
+              {/* Quick buttons */}
+              <div className="flex gap-2 mb-3">
+                {[25, 50, 75, 100].map(pct => (
+                  <button
+                    key={pct}
+                    onClick={() => onAmountChange(pct)}
+                    className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all"
+                    style={{
+                      background: amount === pct ? 'hsl(var(--accent))' : 'hsl(var(--bg-elevated))',
+                      color: amount === pct ? 'white' : 'hsl(var(--text-primary))',
+                    }}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+              
+              {/* Slider */}
+              <input
+                type="range"
+                min="1"
+                max="100"
+                value={amount}
+                onChange={(e) => onAmountChange(parseInt(e.target.value))}
+                className="w-full"
+                style={{ accentColor: 'hsl(var(--accent))' }}
+              />
+              
+              {/* Value preview */}
+              <div className="flex justify-between mt-2 text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                <span>Swap: ${actualValue.toFixed(2)}</span>
+                <span>Keep: ${(token.balanceUsd - actualValue).toFixed(2)}</span>
+              </div>
+            </div>
+          </motion.div>
         )}
-        {isDisabled && analysis && (
-          <div className="text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>
-            {analysis.action === 'skip' ? 'Gas > Value' : 'Hold'}
-          </div>
-        )}
-      </div>
-    </motion.div>
+      </AnimatePresence>
+    </div>
   );
 }
