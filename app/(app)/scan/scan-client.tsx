@@ -110,6 +110,81 @@ import {
   type TokenRecommendation,
 } from '@/lib/smartSelection';
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOKEN LOGO FALLBACKS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Known token logos (hardcoded for reliability)
+const KNOWN_LOGOS: Record<string, string> = {
+  // Native tokens
+  'ETH': 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+  'WETH': 'https://assets.coingecko.com/coins/images/2518/small/weth.png',
+  'MATIC': 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
+  'POL': 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
+  'BNB': 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png',
+  'AVAX': 'https://assets.coingecko.com/coins/images/12559/small/Avalanche_Circle_RedWhite_Trans.png',
+  // Stablecoins
+  'USDC': 'https://assets.coingecko.com/coins/images/6319/small/usdc.png',
+  'USDT': 'https://assets.coingecko.com/coins/images/325/small/Tether.png',
+  'DAI': 'https://assets.coingecko.com/coins/images/9956/small/Badge_Dai.png',
+  // Popular tokens
+  'LINK': 'https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png',
+  'UNI': 'https://assets.coingecko.com/coins/images/12504/small/uni.jpg',
+  'AAVE': 'https://assets.coingecko.com/coins/images/12645/small/AAVE.png',
+  'CRV': 'https://assets.coingecko.com/coins/images/12124/small/Curve.png',
+  'ARB': 'https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg',
+  'OP': 'https://assets.coingecko.com/coins/images/25244/small/Optimism.png',
+  // Meme tokens
+  'PEPE': 'https://assets.coingecko.com/coins/images/29850/small/pepe-token.jpeg',
+  'SHIB': 'https://assets.coingecko.com/coins/images/11939/small/shiba.png',
+  'DOGE': 'https://assets.coingecko.com/coins/images/5/small/dogecoin.png',
+  'FLOKI': 'https://assets.coingecko.com/coins/images/16746/small/PNG_image.png',
+  // DeFi
+  'COMP': 'https://assets.coingecko.com/coins/images/10775/small/COMP.png',
+  'MKR': 'https://assets.coingecko.com/coins/images/1364/small/Mark_Maker.png',
+  'SNX': 'https://assets.coingecko.com/coins/images/3406/small/SNX.png',
+  'SUSHI': 'https://assets.coingecko.com/coins/images/12271/small/512x512_Logo_no_chop.png',
+  '1INCH': 'https://assets.coingecko.com/coins/images/13469/small/1inch-token.png',
+  'BAL': 'https://assets.coingecko.com/coins/images/11683/small/Balancer.png',
+  // Gaming/NFT
+  'APE': 'https://assets.coingecko.com/coins/images/24383/small/apecoin.jpg',
+  'SAND': 'https://assets.coingecko.com/coins/images/12129/small/sandbox_logo.jpg',
+  'MANA': 'https://assets.coingecko.com/coins/images/878/small/decentraland-mana.png',
+  'AXS': 'https://assets.coingecko.com/coins/images/13029/small/axie_infinity_logo.png',
+  'IMX': 'https://assets.coingecko.com/coins/images/17233/small/immutableX-symbol-BLK-RGB.png',
+  // L2
+  'ZK': 'https://assets.coingecko.com/coins/images/38669/small/zk.jpg',
+  'STRK': 'https://assets.coingecko.com/coins/images/26433/small/starknet.png',
+};
+
+// Get token logo from various sources
+function getTokenLogo(address: string, chainId: number, symbol: string): string | undefined {
+  // Check known logos first
+  const upperSymbol = symbol?.toUpperCase();
+  if (KNOWN_LOGOS[upperSymbol]) {
+    return KNOWN_LOGOS[upperSymbol];
+  }
+  
+  // Try Trust Wallet assets
+  const chainMap: Record<number, string> = {
+    1: 'ethereum',
+    8453: 'base',
+    42161: 'arbitrum',
+    10: 'optimism',
+    137: 'polygon',
+    56: 'smartchain',
+    43114: 'avalanchec',
+    324: 'zksync',
+  };
+  
+  const chain = chainMap[chainId];
+  if (chain && address && address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') {
+    return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${chain}/assets/${address}/logo.png`;
+  }
+  
+  return undefined;
+}
+
 // Check if token is an output token on Base
 function isBaseOutputToken(token: Token, outputToken: 'ETH' | 'USDC' = 'ETH'): boolean {
   if (token.chainId !== 8453) return false;
@@ -169,11 +244,15 @@ async function scanWalletAPI(
       chainName: CHAINS[t.chainId]?.name || 'Unknown',
       balance: t.balanceFormatted || t.balance || '0',
       balanceUsd: t.valueUsd || 0,
-      logo: t.logoUrl,
+      // Try multiple logo sources
+      logo: t.logoUrl || t.logo || t.thumbnail || t.image || getTokenLogo(t.address, t.chainId, t.symbol),
       tier: t.tier || 'DUST',
       riskScore: t.riskScore || 0,
       reasons: t.reasons || [],
     }));
+
+    // Sort by value descending
+    tokens.sort((a, b) => b.balanceUsd - a.balanceUsd);
 
     const dustTokens = tokens.filter(t => t.tier === 'DUST' || t.tier === 'MICRODUST');
     const summary = data.data?.summary || { byTier: { LEGIT: 0, DUST: 0, MICRODUST: 0, RISK: 0 } };
@@ -183,7 +262,7 @@ async function scanWalletAPI(
       totalValue: tokens.reduce((sum, t) => sum + t.balanceUsd, 0),
       dustValue: dustTokens.reduce((sum, t) => sum + t.balanceUsd, 0),
       tokens,
-      chainsScanned: Object.keys(CHAINS).length,
+      chainsScanned: chainIds.length,
       scanTime: 0,
       summary,
     };
@@ -346,15 +425,28 @@ function TokenCard({
         
         {/* Token Icon with recommendation indicator */}
         <div className="relative">
+          {token.logo ? (
+            <img 
+              src={token.logo}
+              alt={token.symbol}
+              className="token-icon"
+              style={{ objectFit: 'cover' }}
+              onError={(e) => {
+                // Fallback to text if image fails
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                target.nextElementSibling?.classList.remove('hidden');
+              }}
+            />
+          ) : null}
           <div 
-            className="token-icon"
-            style={token.logo ? { 
-              backgroundImage: `url(${token.logo})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-            } : undefined}
+            className={`token-icon ${token.logo ? 'hidden' : ''}`}
+            style={{ 
+              background: `hsl(${(token.symbol.charCodeAt(0) * 137) % 360} 50% 50% / 0.15)`,
+              color: `hsl(${(token.symbol.charCodeAt(0) * 137) % 360} 50% 40%)`,
+            }}
           >
-            {!token.logo && token.symbol.slice(0, 2)}
+            {token.symbol.slice(0, 2).toUpperCase()}
           </div>
           {isRecommended && (
             <div 
@@ -772,14 +864,17 @@ export default function ScanClient() {
     }
   }, [walletAddress, toastError, toastSuccess]);
 
-  // Filter tokens
+  // Filter and sort tokens by value (highest first)
   const filteredTokens = useMemo(() => {
     if (!scanResult) return [];
-    return scanResult.tokens.filter(token => {
-      if (filterTier && token.tier !== filterTier) return false;
-      if (filterChain && token.chainId !== filterChain) return false;
-      return true;
-    });
+    return scanResult.tokens
+      .filter(token => {
+        if (filterTier && token.tier !== filterTier) return false;
+        if (filterChain && token.chainId !== filterChain) return false;
+        return true;
+      })
+      // Sort by USD value descending (highest value first)
+      .sort((a, b) => b.balanceUsd - a.balanceUsd);
   }, [scanResult, filterTier, filterChain]);
 
   // Selection handlers
