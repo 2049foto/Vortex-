@@ -19,8 +19,13 @@ function log(level: 'info' | 'warn' | 'error', message: string, data?: any) {
   }
 }
 
-// Overall timeout for serverless function (Vercel limit is 10s for hobby, 60s for pro)
-const OVERALL_TIMEOUT = 25000; // 25 seconds
+// Overall timeout for serverless function
+// Vercel Hobby: 10s, Pro: 60s, Enterprise: 900s
+// We use 55s to leave buffer for response processing
+// IMPORTANT: Ensure your Vercel plan supports this timeout
+const OVERALL_TIMEOUT = process.env.VERCEL_ENV === 'production' 
+  ? 55000  // 55 seconds for Pro/Enterprise
+  : 9000;  // 9 seconds for Hobby/Development
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();

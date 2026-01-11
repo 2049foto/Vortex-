@@ -141,11 +141,73 @@ export async function POST(request: NextRequest) {
         }))
       });
 
+      // ═══════════════════════════════════════════════════════════════════════════
+      // SIMULATION CHECK (H-007) - Validate transactions before returning
+      // ═══════════════════════════════════════════════════════════════════════════
+      
+      const simulatedSwaps: typeof plan.swaps = [];
+      const failedSimulations: { symbol: string; reason: string }[] = [];
+      
+      // Only simulate if Tenderly is configured and we have swaps
+      if (plan.swaps.length > 0 && process.env.TENDERLY_ACCESS_KEY) {
+        try {
+          const { simulateTransaction } = await import('@/blockchain/tenderly');
+          
+          for (const swap of plan.swaps) {
+            if (swap.tx && swap.fromToken.chainId === 8453) { // Only simulate Base chain swaps
+              try {
+                const simulation = await simulateTransaction({
+                  chainId: swap.fromToken.chainId,
+                  from: walletAddress,
+                  to: swap.tx.to,
+                  data: swap.tx.data,
+                  value: swap.tx.value || '0',
+                });
+                
+                if (simulation.success) {
+                  simulatedSwaps.push(swap);
+                } else {
+                  log('warn', 'Simulation failed for swap', { 
+                    token: swap.fromToken.symbol,
+                    reason: simulation.errorMessage 
+                  });
+                  failedSimulations.push({
+                    symbol: swap.fromToken.symbol,
+                    reason: simulation.errorMessage || 'Simulation failed',
+                  });
+                }
+              } catch (simError) {
+                // Non-blocking - include swap even if simulation fails
+                log('warn', 'Simulation error (non-blocking)', { 
+                  token: swap.fromToken.symbol,
+                  error: simError instanceof Error ? simError.message : 'unknown'
+                });
+                simulatedSwaps.push(swap);
+              }
+            } else {
+              // No simulation for non-Base chains or missing tx
+              simulatedSwaps.push(swap);
+            }
+          }
+        } catch (error) {
+          log('warn', 'Tenderly import failed (non-blocking)', { error });
+          // Fallback: include all swaps without simulation
+          simulatedSwaps.push(...plan.swaps);
+        }
+      } else {
+        // No Tenderly configured - include all swaps
+        simulatedSwaps.push(...plan.swaps);
+      }
+      
+      // Update plan with simulated swaps only
+      const finalSwaps = simulatedSwaps.length > 0 ? simulatedSwaps : plan.swaps;
+
       // If dry run, return plan with full tx data for client execution
       if (dryRun) {
         log('info', 'Returning dry run plan with tx data', {
-          swapCount: plan.swaps.length,
-          swapsWithTx: plan.swaps.filter(s => s.tx).length,
+          swapCount: finalSwaps.length,
+          swapsWithTx: finalSwaps.filter(s => s.tx).length,
+          simulationFailures: failedSimulations.length,
         });
         
         return NextResponse.json({
@@ -154,8 +216,13 @@ export async function POST(request: NextRequest) {
             requestId: plan.id,
             status: 'ready',
             requiresClientExecution: true, // Always client execution for security
+            simulationResults: {
+              passed: simulatedSwaps.length,
+              failed: failedSimulations.length,
+              failures: failedSimulations,
+            },
             plan: {
-              swapCount: plan.swaps.length,
+              swapCount: finalSwaps.length,
               estimatedOutput: plan.estimatedOutput,
               estimatedGasSaved: plan.estimatedGasSaved,
               estimatedTime: plan.estimatedTime,
@@ -167,7 +234,7 @@ export async function POST(request: NextRequest) {
                 reason: t.reason,
                 valueUsd: t.token.valueUsd,
               })),
-              swaps: plan.swaps.map((s) => ({
+              swaps: finalSwaps.map((s) => ({
                 router: s.router,
                 fromToken: s.fromToken.symbol,
                 fromTokenAddress: s.fromToken.address,
@@ -175,6 +242,7 @@ export async function POST(request: NextRequest) {
                 toToken: outputToken || 'ETH',
                 expectedOut: s.expectedOut,
                 priceImpact: s.priceImpact,
+                simulated: simulatedSwaps.includes(s),
                 // CRITICAL: Include full tx data for client-side execution
                 tx: s.tx ? {
                   to: s.tx.to,

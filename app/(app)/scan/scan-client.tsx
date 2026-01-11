@@ -992,19 +992,28 @@ export default function ScanClient() {
             transition={{ delay: 0.1 }}
             className="card p-4 mb-4"
           >
+            <label htmlFor="wallet-address" className="sr-only">
+              Wallet address or ENS name
+            </label>
             <div className="flex gap-2">
               <div className="flex-1 relative">
                 <Search 
                   className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" 
                   style={{ color: 'hsl(var(--text-tertiary))' }}
+                  aria-hidden="true"
                 />
                 <input
+                  id="wallet-address"
                   type="text"
                   className="input w-full pl-10"
                   placeholder="0x... or name.eth"
                   value={walletAddress}
                   onChange={(e) => setWalletAddress(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleScan()}
+                  aria-label="Enter wallet address or ENS name"
+                  autoComplete="off"
+                  spellCheck="false"
+                  style={{ fontSize: '16px' }} // Prevent iOS zoom
                 />
               </div>
             </div>

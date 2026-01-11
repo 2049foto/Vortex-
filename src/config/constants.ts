@@ -68,7 +68,7 @@ export const SUPPORTED_CHAINS = {
   AVALANCHE: { chainId: 43114, name: 'Avalanche', nativeToken: 'AVAX' },
   MONAD: { chainId: 838592, name: 'Monad', nativeToken: 'MONAD' },
   ZKSYNC: { chainId: 324, name: 'zkSync Era', nativeToken: 'ETH' },
-  SOLANA: { chainId: -1, name: 'Solana', nativeToken: 'SOL' }, // Special handling
+  SOLANA: { chainId: 0, name: 'Solana', nativeToken: 'SOL' }, // Special handling (chainId 0 = non-EVM)
 } as const;
 
 // Primary output chain (Base)

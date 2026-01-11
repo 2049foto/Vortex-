@@ -1,11 +1,14 @@
 /**
  * Vortex Protocol - Consolidation Service
  * Multi-router swap aggregation and execution
+ * 
+ * PRECISION: Uses decimal.js for all financial calculations
  */
 
 import { createLogger } from '../utils/logger';
 import type { TokenHolding } from './portfolioService';
 import type { RiskResult } from './riskScoringServiceV2';
+import { safeAdd, formatUsd, toDecimal, Decimal } from '../lib/precision';
 import * as oneInch from '../blockchain/routers/oneInch';
 import * as uniswapV4 from '../blockchain/routers/uniswapV4';
 import * as curve from '../blockchain/routers/curve';
@@ -131,12 +134,9 @@ export async function createConsolidationPlan(
         const route = await findBestRoute(token, targetToken, walletAddress);
         if (route) {
           plan.swaps.push(route);
-          plan.estimatedOutput = (
-            parseFloat(plan.estimatedOutput) + parseFloat(route.expectedOut)
-          ).toString();
-          plan.estimatedGasSaved = (
-            parseFloat(plan.estimatedGasSaved) + parseFloat(route.estimatedGas)
-          ).toString();
+          // Use precise decimal arithmetic
+          plan.estimatedOutput = safeAdd(plan.estimatedOutput, route.expectedOut).toString();
+          plan.estimatedGasSaved = safeAdd(plan.estimatedGasSaved, route.estimatedGas).toString();
         } else {
           // Mark as skipped if no route found
           const tokenEntry = plan.tokens.find(t => t.token.address === token.address);
@@ -198,8 +198,10 @@ export async function createConsolidationPlan(
               } : undefined,
             });
 
-            plan.estimatedOutput = (
-              parseFloat(plan.estimatedOutput) + parseFloat(relayQuote.estimatedOutput || '0')
+            // Use precise decimal arithmetic for output calculation
+            plan.estimatedOutput = safeAdd(
+              plan.estimatedOutput, 
+              relayQuote.estimatedOutput || '0'
             ).toString();
 
             logger.info(
@@ -298,6 +300,7 @@ export async function createConsolidationPlan(
  * Find best swap route across multiple routers (1inch, 0x, Curve, Balancer)
  * Uses real APIs for mainnet production
  * Returns full tx data for client-side execution
+ * IMPROVED: Retry logic with exponential backoff
  */
 async function findBestRoute(
   fromToken: TokenHolding,
@@ -312,27 +315,58 @@ async function findBestRoute(
     'Finding best route across all DEXes'
   );
 
-  // Get swap tx data from all routers in parallel (not just quotes)
+  // Retry configuration for DEX calls
+  const MAX_RETRIES = 2;
+  const RETRY_DELAY = 500; // ms
+
+  // Helper to retry a DEX call
+  async function fetchWithRetry(
+    fn: () => Promise<any>,
+    routerName: string
+  ): Promise<any> {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await fn();
+        return result;
+      } catch (e) {
+        if (attempt === MAX_RETRIES) {
+          logger.debug({ router: routerName, attempt, error: (e as Error).message }, 'DEX call failed after retries');
+          return { error: e, router: routerName };
+        }
+        // Wait before retry with exponential backoff
+        await new Promise(r => setTimeout(r, RETRY_DELAY * Math.pow(2, attempt)));
+      }
+    }
+    return { error: new Error('Max retries reached'), router: routerName };
+  }
+
+  // Get swap tx data from all routers in parallel with retry logic
   const swapPromises = [
     // 1inch - Primary aggregator
-    oneInch.getSwapTx({
-      chainId,
-      fromToken: fromToken.address,
-      toToken,
-      amount: amountIn,
-      fromAddress: walletAddress,
-      slippage: 0.5,
-    }).catch(e => ({ error: e, router: '1inch' })),
+    fetchWithRetry(
+      () => oneInch.getSwapTx({
+        chainId,
+        fromToken: fromToken.address,
+        toToken,
+        amount: amountIn,
+        fromAddress: walletAddress,
+        slippage: 0.5,
+      }),
+      '1inch'
+    ),
     
     // 0x/Uniswap - Secondary aggregator
-    uniswapV4.getSwapTx({
-      chainId,
-      fromToken: fromToken.address,
-      toToken,
-      amount: amountIn,
-      fromAddress: walletAddress,
-      slippage: 0.5,
-    }).catch(e => ({ error: e, router: 'uniswap_v4' })),
+    fetchWithRetry(
+      () => uniswapV4.getSwapTx({
+        chainId,
+        fromToken: fromToken.address,
+        toToken,
+        amount: amountIn,
+        fromAddress: walletAddress,
+        slippage: 0.5,
+      }),
+      'uniswap_v4'
+    ),
   ];
 
   const results = await Promise.all(swapPromises);
@@ -593,47 +627,59 @@ async function executeSwap(swap: SwapRoute, walletAddress: string): Promise<stri
 
 /**
  * Update analytics
+ * FIXED: Uses precise decimal arithmetic, sanitized date format
  */
 async function updateAnalytics(plan: ConsolidationPlan, walletAddress: string): Promise<void> {
+  // Calculate consolidated value with precision
   const valueConsolidated = plan.tokens
     .filter((t) => t.action === 'swap')
-    .reduce((sum, t) => sum + t.token.valueUsd, 0);
+    .reduce((sum, t) => safeAdd(sum, t.token.valueUsd), toDecimal(0));
 
-  const date = new Date().toISOString().split('T')[0];
+  // Sanitize date format (YYYY-MM-DD only, no SQL injection possible)
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(now.getUTCDate()).padStart(2, '0');
+  const date = `${year}-${month}-${day}`; // Guaranteed format: YYYY-MM-DD
   
-  // Check if record exists for today
-  const [existing] = await db
-    .select()
-    .from(consolidationAnalytics)
-    .where(eq(consolidationAnalytics.date, date))
-    .limit(1);
+  try {
+    // Check if record exists for today
+    const [existing] = await db
+      .select()
+      .from(consolidationAnalytics)
+      .where(eq(consolidationAnalytics.date, date))
+      .limit(1);
 
-  if (existing) {
-    // Update existing record
-    await db
-      .update(consolidationAnalytics)
-      .set({
-        totalConsolidations: existing.totalConsolidations + 1,
-        totalDustCleanedUsd: (parseFloat(existing.totalDustCleanedUsd || '0') + valueConsolidated).toString(),
-        totalOutputValueUsd: (parseFloat(existing.totalOutputValueUsd || '0') + valueConsolidated).toString(),
-        totalBaseTvlAddedUsd: (parseFloat(existing.totalBaseTvlAddedUsd || '0') + valueConsolidated).toString(),
-        baseConsolidations: existing.baseConsolidations + 1,
-      })
-      .where(eq(consolidationAnalytics.date, date));
-  } else {
-    // Create new record
-    await db.insert(consolidationAnalytics).values({
-      date,
-      totalConsolidations: 1,
-      totalDustCleanedUsd: valueConsolidated.toString(),
-      totalOutputValueUsd: valueConsolidated.toString(),
-      totalGasSavedUsd: '0', // TODO: Calculate
-      totalBaseTvlAddedUsd: valueConsolidated.toString(),
-      baseConsolidations: 1,
-      uniqueUsers: 1,
-      newUsers: 1,
-      returningUsers: 0,
-    });
+    if (existing) {
+      // Update existing record with precise arithmetic
+      await db
+        .update(consolidationAnalytics)
+        .set({
+          totalConsolidations: existing.totalConsolidations + 1,
+          totalDustCleanedUsd: safeAdd(existing.totalDustCleanedUsd || '0', valueConsolidated).toString(),
+          totalOutputValueUsd: safeAdd(existing.totalOutputValueUsd || '0', valueConsolidated).toString(),
+          totalBaseTvlAddedUsd: safeAdd(existing.totalBaseTvlAddedUsd || '0', valueConsolidated).toString(),
+          baseConsolidations: existing.baseConsolidations + 1,
+        })
+        .where(eq(consolidationAnalytics.date, date));
+    } else {
+      // Create new record
+      await db.insert(consolidationAnalytics).values({
+        date,
+        totalConsolidations: 1,
+        totalDustCleanedUsd: valueConsolidated.toString(),
+        totalOutputValueUsd: valueConsolidated.toString(),
+        totalGasSavedUsd: '0',
+        totalBaseTvlAddedUsd: valueConsolidated.toString(),
+        baseConsolidations: 1,
+        uniqueUsers: 1,
+        newUsers: 1,
+        returningUsers: 0,
+      });
+    }
+  } catch (error) {
+    // Non-blocking - analytics failure shouldn't fail the consolidation
+    logger.error({ error, date }, 'Analytics update failed');
   }
 }
 

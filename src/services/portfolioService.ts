@@ -517,6 +517,15 @@ const SLOW_CHAINS = [
 const MAINNET_CHAIN_IDS = [...FAST_CHAINS, ...SLOW_CHAINS];
 
 /**
+ * Rate limiting configuration for API calls
+ * Prevents exceeding Moralis/Alchemy API quotas
+ */
+const RATE_LIMIT_CONFIG = {
+  MAX_CONCURRENT_CHAINS: 4,   // Max chains scanned simultaneously
+  DELAY_BETWEEN_BATCHES: 200, // ms delay between batches
+};
+
+/**
  * Internal function to scan a single chain
  */
 async function scanSingleChainInternal(
@@ -613,10 +622,20 @@ export async function scanWallet(
     ]);
   };
 
-  // Fetch EVM tokens from all chains in parallel with timeout
-  const evmResults = await Promise.allSettled(
-    finalChains.map(scanChainWithTimeout)
-  );
+  // Fetch EVM tokens with rate-limited concurrency
+  // Process in batches to avoid exceeding API quotas
+  const evmResults: PromiseSettledResult<TokenHolding[]>[] = [];
+  
+  for (let i = 0; i < finalChains.length; i += RATE_LIMIT_CONFIG.MAX_CONCURRENT_CHAINS) {
+    const batch = finalChains.slice(i, i + RATE_LIMIT_CONFIG.MAX_CONCURRENT_CHAINS);
+    const batchResults = await Promise.allSettled(batch.map(scanChainWithTimeout));
+    evmResults.push(...batchResults);
+    
+    // Add delay between batches to prevent rate limiting
+    if (i + RATE_LIMIT_CONFIG.MAX_CONCURRENT_CHAINS < finalChains.length) {
+      await new Promise(r => setTimeout(r, RATE_LIMIT_CONFIG.DELAY_BETWEEN_BATCHES));
+    }
+  }
 
   // Flatten EVM results
   const allTokens: TokenHolding[] = [];
