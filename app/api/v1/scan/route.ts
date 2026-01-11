@@ -152,13 +152,26 @@ export async function POST(request: NextRequest) {
         // Continue without risk scores - will use value-based tier classification
       }
 
-      // Step 3: Merge tokens with risk data
-      const tokensWithRisk = tokens.map((token) => {
+      // Chain name mapping
+      const chainNames: Record<number, string> = {
+        1: 'Ethereum',
+        8453: 'Base',
+        42161: 'Arbitrum',
+        10: 'Optimism',
+        137: 'Polygon',
+        56: 'BNB Chain',
+        43114: 'Avalanche',
+        324: 'zkSync',
+        0: 'Solana',
+      };
+
+      // Step 3: Merge tokens with risk data and normalize format
+      const tokensWithRisk = tokens.map((token, index) => {
         const riskKey = `${token.chainId}:${token.address}`;
         const risk = riskScores.get(riskKey);
 
         // Determine tier based on value and risk
-        let tier = 'LEGIT';
+        let tier: 'LEGIT' | 'DUST' | 'MICRODUST' | 'RISK' = 'LEGIT';
         if (risk?.tier) {
           tier = risk.tier;
         } else if (risk?.riskScore0to100 >= 70) {
@@ -169,22 +182,41 @@ export async function POST(request: NextRequest) {
           tier = 'DUST';
         }
 
+        // Generate unique ID
+        const id = `${token.chainId}-${token.address}-${index}`;
+
         return {
-          ...token,
+          // Required fields for client
+          id,
+          symbol: token.symbol || 'UNKNOWN',
+          name: token.name || token.symbol || 'Unknown Token',
+          address: token.address,
+          chainId: token.chainId,
+          chainName: chainNames[token.chainId] || 'Unknown',
+          balance: token.balanceFormatted || token.balance || '0',
+          balanceUsd: token.valueUsd || 0,
+          logo: token.logoUrl || undefined,
           tier,
           riskScore: risk?.riskScore0to100 || 0,
           reasons: risk ? Object.values(risk.layers || {}).flatMap((l: any) => l.evidence || []) : [],
           recommendations: risk?.explanation ? [risk.explanation] : [],
+          // Keep original fields for debugging
+          decimals: token.decimals,
+          priceUsd: token.priceUsd,
         };
       });
 
       // Step 4: Generate summary
       const dustTokens = tokensWithRisk.filter((t) => t.tier === 'DUST' || t.tier === 'MICRODUST');
-      const dustValue = dustTokens.reduce((sum, t) => sum + t.valueUsd, 0);
+      const dustValue = dustTokens.reduce((sum, t) => sum + t.balanceUsd, 0);
+      const totalValue = tokensWithRisk.reduce((sum, t) => sum + t.balanceUsd, 0);
+      
+      // Count unique chains scanned
+      const chainsScanned = new Set(tokensWithRisk.map(t => t.chainId)).size || (chainIds?.length ?? 0);
       
       const summary = {
         totalTokens: tokensWithRisk.length,
-        totalValue: tokensWithRisk.reduce((sum, t) => sum + t.valueUsd, 0),
+        totalValue,
         byTier: {
           LEGIT: tokensWithRisk.filter((t) => t.tier === 'LEGIT').length,
           DUST: tokensWithRisk.filter((t) => t.tier === 'DUST').length,
@@ -211,11 +243,18 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Sort tokens by value (highest first) for better UX
+      const sortedTokens = tokensWithRisk.sort((a, b) => b.balanceUsd - a.balanceUsd);
+
       return NextResponse.json({
         success: true,
         data: {
           wallet: walletAddress,
-          tokens: tokensWithRisk,
+          tokens: sortedTokens,
+          totalValue,
+          dustValue,
+          chainsScanned,
+          scanTime: Date.now() - startTime,
           summary,
         },
       });

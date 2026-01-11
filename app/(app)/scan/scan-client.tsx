@@ -61,17 +61,23 @@ interface Token {
 
 interface ScanResult {
   wallet: string;
-  totalValue: number;
-  dustValue: number;
+  totalValue?: number;
+  dustValue?: number;
   tokens: Token[];
-  chainsScanned: number;
-  scanTime: number;
-  summary: {
-    byTier: {
+  chainsScanned?: number;
+  scanTime?: number;
+  summary?: {
+    totalTokens?: number;
+    totalValue?: number;
+    byTier?: {
       LEGIT: number;
       DUST: number;
       MICRODUST: number;
       RISK: number;
+    };
+    consolidationOpportunity?: {
+      tokenCount: number;
+      totalValue: number;
     };
   };
 }
@@ -235,7 +241,8 @@ export default function ScanClient() {
       
       setTimeout(() => {
         setStep('review');
-        toastSuccess('Scan Complete', `Found ${result.data.tokens.length} tokens across ${result.data.chainsScanned} chains`);
+        const chainsCount = result.data.chainsScanned || selectedChains.size;
+        toastSuccess('Scan Complete', `Found ${result.data.tokens?.length || 0} tokens across ${chainsCount} chains`);
       }, 500);
       
     } catch (error) {
@@ -436,7 +443,8 @@ export default function ScanClient() {
               />
               <input
                 type="text"
-                className="w-full h-14 pl-12 pr-4 rounded-xl text-base font-medium transition-all"
+                aria-label="Wallet address or ENS name"
+                className="w-full h-14 pl-12 pr-4 rounded-xl text-base font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[hsl(217,91%,60%)]"
                 style={{ 
                   background: 'hsl(var(--bg-tertiary))',
                   border: '2px solid hsl(var(--border))',
@@ -730,7 +738,7 @@ export default function ScanClient() {
           <div>
             <h1 className="text-lg font-bold">Review & Consolidate</h1>
             <p className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
-              {scanResult?.tokens.length} tokens found • Smart selection applied
+              {scanResult?.tokens?.length || 0} tokens found • Smart selection applied
             </p>
           </div>
           <button 
@@ -753,7 +761,7 @@ export default function ScanClient() {
             <div className="text-xs font-medium mb-1" style={{ color: 'hsl(var(--text-tertiary))' }}>
               Portfolio Value
             </div>
-            <div className="text-2xl font-bold">${scanResult?.totalValue.toFixed(2)}</div>
+            <div className="text-2xl font-bold">${(scanResult?.totalValue || 0).toFixed(2)}</div>
           </div>
           <div 
             className="p-4 rounded-2xl"
@@ -816,6 +824,62 @@ export default function ScanClient() {
           </div>
         </motion.div>
 
+        {/* Empty State - No tokens found */}
+        {(!scanResult?.tokens || scanResult.tokens.length === 0) && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-8 rounded-2xl text-center"
+            style={{ background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border))' }}
+          >
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center" style={{ background: 'hsl(var(--bg-secondary))' }}>
+              <Search className="w-8 h-8" style={{ color: 'hsl(var(--text-tertiary))' }} />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">No Tokens Found</h3>
+            <p className="text-sm mb-4" style={{ color: 'hsl(var(--text-tertiary))' }}>
+              No dust tokens detected in this wallet across the selected chains.
+            </p>
+            <button
+              onClick={() => setStep('input')}
+              className="px-6 py-3 rounded-xl font-semibold"
+              style={{ background: 'hsl(var(--accent))', color: 'white' }}
+            >
+              Try Another Wallet
+            </button>
+          </motion.div>
+        )}
+
+        {/* No Swappable Tokens - but have tokens */}
+        {scanResult?.tokens && scanResult.tokens.length > 0 && swapSummary && 
+         swapSummary.swappableTokens.length === 0 && swapSummary.burnableTokens.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-8 rounded-2xl text-center"
+            style={{ background: 'hsl(var(--warning-light))', border: '1px solid hsl(var(--warning) / 0.2)' }}
+          >
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center" style={{ background: 'hsl(var(--warning) / 0.2)' }}>
+              <AlertCircle className="w-8 h-8" style={{ color: 'hsl(var(--warning))' }} />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">No Profitable Swaps</h3>
+            <p className="text-sm mb-4" style={{ color: 'hsl(var(--text-secondary))' }}>
+              All {scanResult.tokens.length} tokens found have values too low to swap profitably. 
+              Gas costs would exceed the token values.
+            </p>
+            <div className="text-xs p-3 rounded-xl mb-4" style={{ background: 'hsl(var(--bg-primary))' }}>
+              <strong>Why?</strong> Transaction gas fees on some chains exceed the value of your dust tokens. 
+              Wait for lower gas prices or accumulate more tokens.
+            </div>
+            <button
+              onClick={() => setStep('input')}
+              className="px-6 py-3 rounded-xl font-semibold"
+              style={{ background: 'hsl(var(--accent))', color: 'white' }}
+            >
+              Scan Another Wallet
+            </button>
+          </motion.div>
+        )}
+
         {/* Swappable Tokens Section */}
         {swapSummary && swapSummary.swappableTokens.length > 0 && (
           <TokenSection
@@ -870,21 +934,39 @@ export default function ScanClient() {
           />
         )}
 
-        {/* Skipped Tokens Section */}
+        {/* Skipped Tokens Section - with detailed explanations */}
         {swapSummary && swapSummary.skippedTokens.length > 0 && (
-          <TokenSection
-            title="Skipped (Not Profitable)"
-            subtitle={`${swapSummary.skippedTokens.length} tokens • Gas > Value`}
-            icon={<X className="w-5 h-5" />}
-            color="var(--text-tertiary)"
-            expanded={expandedSections.has('skipped')}
-            onToggle={() => toggleSection('skipped')}
-            tokens={swapSummary.skippedTokens}
-            selectedTokens={new Set()}
-            tokenAnalyses={tokenAnalyses}
-            onToggleToken={() => {}}
-            isDisabled
-          />
+          <>
+            <TokenSection
+              title="Cannot Swap (Gas > Value)"
+              subtitle={`${swapSummary.skippedTokens.length} tokens`}
+              icon={<X className="w-5 h-5" />}
+              color="var(--text-tertiary)"
+              expanded={expandedSections.has('skipped')}
+              onToggle={() => toggleSection('skipped')}
+              tokens={swapSummary.skippedTokens}
+              selectedTokens={new Set()}
+              tokenAnalyses={tokenAnalyses}
+              onToggleToken={() => {}}
+              isDisabled
+            />
+            {expandedSections.has('skipped') && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="mx-2 -mt-2 mb-4 p-3 rounded-b-xl text-xs"
+                style={{ 
+                  background: 'hsl(var(--bg-secondary))',
+                  color: 'hsl(var(--text-tertiary))',
+                  borderTop: 'none'
+                }}
+              >
+                <Info className="w-3 h-3 inline mr-1" />
+                These tokens have value less than the gas cost to swap them. 
+                Wait for lower gas or accumulate more balance.
+              </motion.div>
+            )}
+          </>
         )}
 
         {/* Hold Tokens Section */}
