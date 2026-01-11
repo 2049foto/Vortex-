@@ -357,10 +357,19 @@ p { color: hsl(var(--text-secondary)); }
 }
 
 .btn-sm {
-  height: 38px;
-  padding: 0 16px;
-  font-size: 14px;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
   border-radius: var(--radius-sm);
+  gap: 5px;
+}
+
+.btn-xs {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 11px;
+  border-radius: 8px;
+  gap: 4px;
 }
 
 .btn-xs {
@@ -500,35 +509,76 @@ p { color: hsl(var(--text-secondary)); }
 .token-card .token-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .token-card .token-name {
   font-weight: 600;
-  font-size: 15px;
+  font-size: 14px;
   color: hsl(var(--text-primary));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.3;
 }
 
 .token-card .token-value {
-  font-size: 13px;
+  font-size: 12px;
   color: hsl(var(--text-tertiary));
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.3;
 }
 
 .token-card .token-amount {
   text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  min-width: 70px;
+  flex-shrink: 0;
 }
 
 .token-card .token-usd {
   font-weight: 600;
-  font-size: 15px;
+  font-size: 14px;
   color: hsl(var(--text-primary));
+  line-height: 1.3;
 }
 
 .token-card .token-balance {
-  font-size: 13px;
+  font-size: 11px;
   color: hsl(var(--text-tertiary));
+  line-height: 1.3;
+}
+
+/* Mobile Token Card Compact */
+@media (max-width: 380px) {
+  .token-card {
+    padding: 10px 12px !important;
+  }
+  
+  .token-card .token-icon {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 11px !important;
+  }
+  
+  .token-card .token-name {
+    font-size: 13px;
+  }
+  
+  .token-card .token-value {
+    font-size: 11px;
+  }
+  
+  .token-card .token-usd {
+    font-size: 13px;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -600,12 +650,21 @@ p { color: hsl(var(--text-secondary)); }
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 24px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 500;
+  justify-content: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
   border-radius: var(--radius-full);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.badge-sm {
+  height: 18px;
+  padding: 0 6px;
+  font-size: 10px;
 }
 
 .badge-primary {

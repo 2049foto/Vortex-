@@ -1,18 +1,16 @@
 {
   "accountAssociation": {
-    "header": "eyJmaWQiOjEsInR5cGUiOiJjdXN0b2R5IiwiYWRkcmVzcyI6IjB4MDAwMCJ9",
-    "payload": "eyJkb21haW4iOiJ2b3J0ZXguYnVpbGQifQ",
-    "signature": "0x0000"
+    "header": "eyJmaWQiOjEwMDAyNiwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweEVkN0Y0MTI2Qjg4NjlCNTI4NzEyMjREODYyMDczZUJFODZCMjlEMWMifQ==",
+    "payload": "eyJkb21haW4iOiJ2b3J0ZXhiYXNlLnZlcmNlbC5hcHAifQ==",
+    "signature": "MHhlNDI3YTRkYWMzYzE2N2MwNmUzZjRhYTU3YjlhMjdhNjM4YzIxZDMzMmI1MzFlMTRmNDVjYjVmN2RhY2ZjMzJlNjNlZGExYmI0ZjgyNGRmNGEwNmQ4OTg1YTI1YjFmZDRjN2E1YTg5YzM1ZjY0YTk3MTU1MjE2MTkxMDQ2OTQ5YzFi"
   },
   "frame": {
     "version": "1",
     "name": "Vortex Protocol",
-    "iconUrl": "https://dust-sweeper-yrjq.vercel.app/logo.png",
-    "homeUrl": "https://dust-sweeper-yrjq.vercel.app",
-    "imageUrl": "https://dust-sweeper-yrjq.vercel.app/api/og/frame-intro",
-    "buttonTitle": "Clean My Wallet",
-    "splashImageUrl": "https://dust-sweeper-yrjq.vercel.app/api/og/frame-intro",
-    "splashBackgroundColor": "#1e1b4b",
-    "webhookUrl": "https://dust-sweeper-yrjq.vercel.app/api/frame/webhook"
+    "iconUrl": "https://vortexbase.vercel.app/logo.svg",
+    "splashImageUrl": "https://vortexbase.vercel.app/og-image.png",
+    "splashBackgroundColor": "#0052FF",
+    "homeUrl": "https://vortexbase.vercel.app",
+    "webhookUrl": "https://vortexbase.vercel.app/api/frame/webhook"
   }
 }

@@ -68,17 +68,25 @@ interface ScanResult {
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const CHAINS: Record<number, { name: string; color: string; icon: string }> = {
-  8453: { name: 'Base', color: '#0052FF', icon: '🔵' },
-  1: { name: 'Ethereum', color: '#627EEA', icon: '⟠' },
-  42161: { name: 'Arbitrum', color: '#28A0F0', icon: '🔷' },
-  10: { name: 'Optimism', color: '#FF0420', icon: '🔴' },
-  137: { name: 'Polygon', color: '#8247E5', icon: '💜' },
-  56: { name: 'BNB', color: '#F0B90B', icon: '🟡' },
-  43114: { name: 'Avalanche', color: '#E84142', icon: '🔺' },
-  324: { name: 'zkSync', color: '#8C8DFC', icon: '⬡' },
-  0: { name: 'Solana', color: '#9945FF', icon: '◎' },
-  838592: { name: 'Monad', color: '#00D4AA', icon: '🟢' },
+const CHAINS: Record<number, { name: string; color: string; icon: string; enabled: boolean }> = {
+  8453: { name: 'Base', color: '#0052FF', icon: '🔵', enabled: true },
+  1: { name: 'Ethereum', color: '#627EEA', icon: '⟠', enabled: true },
+  42161: { name: 'Arbitrum', color: '#28A0F0', icon: '🔷', enabled: true },
+  10: { name: 'Optimism', color: '#FF0420', icon: '🔴', enabled: true },
+  137: { name: 'Polygon', color: '#8247E5', icon: '💜', enabled: true },
+  56: { name: 'BNB', color: '#F0B90B', icon: '🟡', enabled: true },
+  43114: { name: 'Avalanche', color: '#E84142', icon: '🔺', enabled: true },
+  324: { name: 'zkSync', color: '#8C8DFC', icon: '⬡', enabled: true },
+};
+
+// Solana handled separately
+const SOLANA_CHAIN = { chainId: 0, name: 'Solana', color: '#9945FF', icon: '◎' };
+
+// Chain presets for quick selection
+const CHAIN_PRESETS = {
+  base: { label: 'Base Only', chains: [8453], description: 'Fastest, no bridging' },
+  l2: { label: 'L2s Only', chains: [8453, 42161, 10, 324], description: 'Fast & cheap' },
+  all: { label: 'All Chains', chains: Object.keys(CHAINS).map(Number), description: '10 EVM chains' },
 };
 
 const TIERS = {
@@ -116,7 +124,11 @@ function isBaseOutputToken(token: Token, outputToken: 'ETH' | 'USDC' = 'ETH'): b
 
 const SCAN_TIMEOUT = 25000; // 25 seconds max
 
-async function scanWalletAPI(walletAddress: string): Promise<ScanResult> {
+async function scanWalletAPI(
+  walletAddress: string, 
+  chainIds: number[] = [8453],
+  includeSolana: boolean = false
+): Promise<ScanResult> {
   // Create abort controller with timeout
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), SCAN_TIMEOUT);
@@ -127,8 +139,8 @@ async function scanWalletAPI(walletAddress: string): Promise<ScanResult> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         walletAddress,
-        chainIds: [8453, 1, 42161, 10, 137, 56, 43114, 324],
-        includeSolana: false,
+        chainIds,
+        includeSolana,
       }),
       signal: controller.signal,
     });
@@ -634,6 +646,12 @@ export default function ScanClient() {
   const [selectionMode, setSelectionMode] = useState<'smart' | 'dustOnly' | 'baseOnly' | 'highValue' | 'manual'>('smart');
   const [selectionResult, setSelectionResult] = useState<SelectionResult | null>(null);
   
+  // Chain selection state
+  const [selectedChains, setSelectedChains] = useState<Set<number>>(new Set([8453])); // Default: Base only
+  const [chainPreset, setChainPreset] = useState<'base' | 'l2' | 'all'>('base');
+  const [showChainSelector, setShowChainSelector] = useState(false);
+  const [includeSolana, setIncludeSolana] = useState(false);
+  
   // Auto-fill connected wallet
   useEffect(() => {
     if (isConnected && connectedAddress && !walletAddress && !addressParam) {
@@ -672,26 +690,29 @@ export default function ScanClient() {
     setScanResult(null);
     
     const startTime = Date.now();
-    const chainNames = Object.values(CHAINS).map(c => c.name);
+    const chainsToScan = Array.from(selectedChains);
+    const chainNames = chainsToScan.map(id => CHAINS[id]?.name || 'Unknown');
+    if (includeSolana) chainNames.push('Solana');
     let progressIntervalId: NodeJS.Timeout | null = null;
     
     // Create a promise that we can resolve/reject
     const scanPromise = async () => {
       // Progress animation - smoother with max 95%
       let progress = 0;
+      let chainIndex = 0;
       progressIntervalId = setInterval(() => {
         // Slower progress that never reaches 100%
         const increment = progress < 50 ? 8 : progress < 80 ? 4 : 1;
         progress = Math.min(progress + Math.random() * increment, 95);
         setScanProgress(Math.floor(progress));
         
-        // Show random chain being scanned
-        const randomChain = chainNames[Math.floor(Math.random() * chainNames.length)];
-        setCurrentChain(randomChain);
-      }, 250);
+        // Show chains being scanned in order
+        setCurrentChain(chainNames[chainIndex % chainNames.length]);
+        chainIndex++;
+      }, 400);
 
       try {
-        const result = await scanWalletAPI(addr);
+        const result = await scanWalletAPI(addr, chainsToScan, includeSolana);
         
         if (progressIntervalId) {
           clearInterval(progressIntervalId);
@@ -869,58 +890,182 @@ export default function ScanClient() {
             </p>
           </motion.div>
 
+          {/* Wallet Input */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="wallet-input-hero"
+            className="card p-4 mb-4"
           >
-            <div className="input-group">
-              <Search className="input-icon w-5 h-5" />
-              <input
-                type="text"
-                className="input input-with-icon input-wallet"
-                placeholder="0x... or name.eth"
-                value={walletAddress}
-                onChange={(e) => setWalletAddress(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleScan()}
-              />
-              <button
-                className="btn btn-primary"
-                onClick={() => handleScan()}
-                disabled={!walletAddress}
-              >
-                Scan
-                <ArrowRight className="w-4 h-4" />
-              </button>
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search 
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" 
+                  style={{ color: 'hsl(var(--text-tertiary))' }}
+                />
+                <input
+                  type="text"
+                  className="input w-full pl-10"
+                  placeholder="0x... or name.eth"
+                  value={walletAddress}
+                  onChange={(e) => setWalletAddress(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleScan()}
+                />
+              </div>
             </div>
           </motion.div>
+
+          {/* Chain Selector */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="card p-4 mb-4"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium">Chains to scan</span>
+              <span className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                {selectedChains.size} selected
+              </span>
+            </div>
+            
+            {/* Quick Presets */}
+            <div className="flex gap-2 mb-3">
+              {Object.entries(CHAIN_PRESETS).map(([key, preset]) => (
+                <button
+                  key={key}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-medium transition-all ${
+                    chainPreset === key 
+                      ? 'bg-[hsl(var(--accent))] text-white shadow-md' 
+                      : 'bg-[hsl(var(--bg-tertiary))]'
+                  }`}
+                  onClick={() => {
+                    setChainPreset(key as 'base' | 'l2' | 'all');
+                    setSelectedChains(new Set(preset.chains));
+                  }}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Chain Pills (Collapsed by default) */}
+            <button
+              className="w-full flex items-center justify-between text-xs py-2"
+              style={{ color: 'hsl(var(--text-secondary))' }}
+              onClick={() => setShowChainSelector(!showChainSelector)}
+            >
+              <span>Customize chains</span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${showChainSelector ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+              {showChainSelector && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="pt-3"
+                  style={{ borderTop: '1px solid hsl(var(--border))' }}
+                >
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(CHAINS).map(([chainId, chain]) => {
+                      const id = parseInt(chainId);
+                      const isSelected = selectedChains.has(id);
+                      return (
+                        <button
+                          key={chainId}
+                          className={`flex items-center gap-1.5 py-1.5 px-3 rounded-full text-xs font-medium transition-all ${
+                            isSelected 
+                              ? 'shadow-sm' 
+                              : 'opacity-50'
+                          }`}
+                          style={{ 
+                            background: isSelected ? `${chain.color}20` : 'hsl(var(--bg-tertiary))',
+                            border: isSelected ? `1px solid ${chain.color}` : '1px solid transparent',
+                            color: isSelected ? chain.color : 'hsl(var(--text-secondary))'
+                          }}
+                          onClick={() => {
+                            const next = new Set(selectedChains);
+                            if (next.has(id)) {
+                              next.delete(id);
+                              // At least one chain required
+                              if (next.size === 0) next.add(8453);
+                            } else {
+                              next.add(id);
+                            }
+                            setSelectedChains(next);
+                            setChainPreset('base'); // Reset preset on manual change
+                          }}
+                        >
+                          <span>{chain.icon}</span>
+                          <span>{chain.name}</span>
+                          {isSelected && <CheckCircle className="w-3 h-3" />}
+                        </button>
+                      );
+                    })}
+                    
+                    {/* Solana Toggle */}
+                    <button
+                      className={`flex items-center gap-1.5 py-1.5 px-3 rounded-full text-xs font-medium transition-all ${
+                        includeSolana ? 'shadow-sm' : 'opacity-50'
+                      }`}
+                      style={{ 
+                        background: includeSolana ? `${SOLANA_CHAIN.color}20` : 'hsl(var(--bg-tertiary))',
+                        border: includeSolana ? `1px solid ${SOLANA_CHAIN.color}` : '1px solid transparent',
+                        color: includeSolana ? SOLANA_CHAIN.color : 'hsl(var(--text-secondary))'
+                      }}
+                      onClick={() => setIncludeSolana(!includeSolana)}
+                    >
+                      <span>{SOLANA_CHAIN.icon}</span>
+                      <span>{SOLANA_CHAIN.name}</span>
+                      {includeSolana && <CheckCircle className="w-3 h-3" />}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+
+          {/* Scan Button */}
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="btn btn-primary btn-lg w-full"
+            onClick={() => handleScan()}
+            disabled={!walletAddress || selectedChains.size === 0}
+          >
+            <Search className="w-5 h-5" />
+            Scan {selectedChains.size} Chain{selectedChains.size > 1 ? 's' : ''}
+            <ArrowRight className="w-5 h-5" />
+          </motion.button>
           
           {/* Features */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
-            className="grid grid-cols-3 gap-3 mt-8"
+            className="grid grid-cols-3 gap-2 mt-6"
           >
             {[
-              { icon: <Zap className="w-4 h-4" />, label: 'Fast Scan', desc: '< 10 seconds' },
-              { icon: <Shield className="w-4 h-4" />, label: '20 Layers', desc: 'Risk analysis' },
-              { icon: <TrendingUp className="w-4 h-4" />, label: '10 Chains', desc: 'Parallel scan' },
+              { icon: <Zap className="w-4 h-4" />, label: 'Fast', desc: '<10s' },
+              { icon: <Shield className="w-4 h-4" />, label: 'Secure', desc: '20-layer' },
+              { icon: <TrendingUp className="w-4 h-4" />, label: 'Smart', desc: 'AI select' },
             ].map((feature, i) => (
               <div 
                 key={i}
-                className="card text-center"
-                style={{ padding: '16px 12px' }}
+                className="text-center py-3 px-2 rounded-xl"
+                style={{ background: 'hsl(var(--bg-secondary))' }}
               >
                 <div 
-                  className="w-8 h-8 mx-auto mb-2 rounded-lg flex items-center justify-center"
+                  className="w-8 h-8 mx-auto mb-1.5 rounded-lg flex items-center justify-center"
                   style={{ background: 'hsl(var(--accent-light))', color: 'hsl(var(--accent))' }}
                 >
                   {feature.icon}
                 </div>
-                <div className="text-xs font-medium">{feature.label}</div>
-                <div className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                <div className="text-xs font-semibold">{feature.label}</div>
+                <div className="text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>
                   {feature.desc}
                 </div>
               </div>
