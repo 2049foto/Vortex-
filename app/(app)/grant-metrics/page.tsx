@@ -68,27 +68,31 @@ export default function GrantMetricsPage() {
       icon: BarChart3,
       gradient: 'from-blue-500 to-blue-600',
       description: 'Total successful consolidations',
+      key: 'totalPortfoliosClean',
     },
     {
       label: 'Dust Value Cleaned',
-      value: `$${parseFloat(overview.dustValueCleaned || '0').toLocaleString()}`,
+      value: `$${parseFloat(overview.dustValueCleaned || '0').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       icon: DollarSign,
       gradient: 'from-purple-500 to-purple-600',
       description: 'Total value consolidated',
+      key: 'dustValueCleaned',
     },
     {
       label: 'Base TVL Added',
-      value: `$${parseFloat(overview.baseTvlAdded || '0').toLocaleString()}`,
+      value: `$${parseFloat(overview.baseTvlAdded || '0').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       icon: TrendingUp,
       gradient: 'from-emerald-500 to-emerald-600',
       description: 'Value moved to Base chain',
+      key: 'baseTvlAdded',
     },
     {
       label: 'Gas Saved',
-      value: `$${parseFloat(overview.gasSaved || '0').toLocaleString()}`,
+      value: `$${parseFloat(overview.gasSaved || '0').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       icon: Zap,
       gradient: 'from-amber-500 to-amber-600',
       description: 'Via gasless transactions',
+      key: 'gasSaved',
     },
     {
       label: 'Total Consolidations',
@@ -96,6 +100,7 @@ export default function GrantMetricsPage() {
       icon: RefreshCw,
       gradient: 'from-pink-500 to-pink-600',
       description: 'Including pending',
+      key: 'totalConsolidations',
     },
     {
       label: 'Unique Users',
@@ -103,6 +108,7 @@ export default function GrantMetricsPage() {
       icon: Users,
       gradient: 'from-indigo-500 to-indigo-600',
       description: 'Total users served',
+      key: 'uniqueUsers',
     },
   ];
 
@@ -167,11 +173,61 @@ export default function GrantMetricsPage() {
           })}
         </div>
 
+        {/* Chain Distribution */}
+        {data?.chainDistribution && data.chainDistribution.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="mb-8"
+          >
+            <Card className="shadow-xl">
+              <CardContent className="py-6">
+                <h3 className="text-xl font-bold mb-4 text-center">Consolidations by Chain</h3>
+                <div className="space-y-3">
+                  {data.chainDistribution.map((chain: any, index: number) => {
+                    const chainNames: Record<number, string> = {
+                      8453: 'Base',
+                      1: 'Ethereum',
+                      42161: 'Arbitrum',
+                      10: 'Optimism',
+                      137: 'Polygon',
+                      56: 'BNB Chain',
+                      43114: 'Avalanche',
+                      324: 'zkSync',
+                    };
+                    const chainName = chainNames[chain.chainId] || `Chain ${chain.chainId}`;
+                    const percentage = data.chainDistribution.reduce((sum: number, c: any) => sum + c.count, 0);
+                    const pct = percentage > 0 ? (chain.count / percentage) * 100 : 0;
+                    
+                    return (
+                      <div key={chain.chainId} className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium">{chainName}</span>
+                          <span className="text-slate-600">{chain.count} consolidations</span>
+                        </div>
+                        <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${pct}%` }}
+                            transition={{ delay: 0.7 + index * 0.1, duration: 0.5 }}
+                            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
         {/* Impact Summary */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
+          transition={{ delay: 0.7 }}
         >
           <Card className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-2xl overflow-hidden relative">
             <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
@@ -194,7 +250,7 @@ export default function GrantMetricsPage() {
               <div className="border-t border-white/20 pt-6 text-center">
                 <p className="text-sm opacity-90 max-w-2xl mx-auto">
                   Vortex Protocol is driving portfolio hygiene and TVL growth on Base through gasless consolidation,
-                  multi-router optimization, and premium 20-layer risk scoring.
+                  multi-router optimization, and premium 20-layer risk scoring. Supporting 10 EVM chains with smart routing.
                 </p>
               </div>
             </CardContent>

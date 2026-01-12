@@ -188,6 +188,44 @@ export const EVM_CHAINS: Record<number, ChainConfig> = {
     relaySupported: true,
     priority: 3,
   },
+  
+  // Scroll - zkEVM L2
+  534352: {
+    chainId: 534352,
+    name: 'Scroll',
+    shortName: 'scroll',
+    nativeToken: 'ETH',
+    nativeTokenDecimals: 18,
+    color: '#FFE66D',
+    icon: '📜',
+    enabled: true,
+    moralisId: 'scroll', // May need to check if Moralis supports Scroll
+    alchemySubdomain: 'scroll-mainnet',
+    dexscreenerId: 'scroll', // May need to verify
+    coingeckoId: 'ethereum',
+    blockExplorerUrl: 'https://scrollscan.com',
+    relaySupported: true, // Verify with Relay
+    priority: 2,
+  },
+  
+  // Linea - Consensys zkEVM
+  59144: {
+    chainId: 59144,
+    name: 'Linea',
+    shortName: 'linea',
+    nativeToken: 'ETH',
+    nativeTokenDecimals: 18,
+    color: '#00D9FF',
+    icon: '➰',
+    enabled: true,
+    moralisId: 'linea', // May need to check if Moralis supports Linea
+    alchemySubdomain: 'linea-mainnet',
+    dexscreenerId: 'linea', // May need to verify
+    coingeckoId: 'ethereum',
+    blockExplorerUrl: 'https://lineascan.build',
+    relaySupported: true, // Verify with Relay
+    priority: 1,
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -45,12 +45,35 @@ export async function GET(request: NextRequest) {
         .from(consolidationRequests)
         .where(sql`output_chain_id = 8453`); // Base chain ID
 
+      // Chain distribution (which chains users are consolidating FROM)
+      const chainDistribution = await db
+        .select({
+          chainId: sql<number>`CAST(input_chain_ids->0 AS INTEGER)`,
+          count: sql<number>`COUNT(*)`,
+          value: sql<string>`COALESCE(SUM(CAST(actual_output AS DECIMAL)), 0)`,
+        })
+        .from(consolidationRequests)
+        .where(sql`status = 'CONFIRMED'`)
+        .groupBy(sql`CAST(input_chain_ids->0 AS INTEGER)`)
+        .orderBy(desc(sql<number>`COUNT(*)`));
+
       // Recent activity
       const recentActivity = await db
         .select()
         .from(consolidationRequests)
         .orderBy(desc(consolidationRequests.createdAt))
         .limit(10);
+
+      // Daily active users (last 7 days)
+      const dailyActiveUsers = await db
+        .select({
+          date: sql<string>`DATE(created_at)`,
+          users: sql<number>`COUNT(DISTINCT user_id)`,
+        })
+        .from(consolidationRequests)
+        .where(sql`created_at >= NOW() - INTERVAL '7 days'`)
+        .groupBy(sql`DATE(created_at)`)
+        .orderBy(sql`DATE(created_at) DESC`);
 
       return NextResponse.json({
         success: true,
@@ -63,7 +86,16 @@ export async function GET(request: NextRequest) {
             totalConsolidations: metrics.totalConsolidations || 0,
             uniqueUsers: metrics.uniqueUsers || 0,
           },
+          chainDistribution: chainDistribution.map((chain) => ({
+            chainId: chain.chainId,
+            count: chain.count,
+            value: parseFloat(chain.value || '0').toFixed(2),
+          })),
           timeSeries: timeSeries.reverse(), // Chronological order
+          dailyActiveUsers: dailyActiveUsers.map((day) => ({
+            date: day.date,
+            users: day.users,
+          })),
           recentActivity: recentActivity.map((activity) => ({
             id: activity.id,
             user: activity.userId,

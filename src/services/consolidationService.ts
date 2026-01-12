@@ -172,6 +172,11 @@ export async function createConsolidationPlan(
             tradeType: 'EXACT_INPUT',
           });
 
+          if (!relayQuote) {
+            logger.warn({ token: token.symbol, chainId: token.chainId }, 'Relay quote failed, skipping bridge route');
+            continue;
+          }
+
           logger.info({
             token: token.symbol,
             stepsCount: relayQuote.steps?.length || 0,

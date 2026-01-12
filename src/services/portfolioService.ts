@@ -1,6 +1,13 @@
 /**
  * Vortex Protocol - Portfolio Service
  * Scan wallet and fetch token holdings across chains
+ * 
+ * IMPROVEMENTS (Phase 1.1):
+ * - Proper Moralis pagination with cursor handling
+ * - Detailed error handling and logging
+ * - DexScreener price fallback for tokens with price = 0
+ * - Native token detection (ETH, POL, BNB, etc.)
+ * - API health check verification
  */
 
 import { env } from '../config/env';
@@ -8,11 +15,40 @@ import { getSupportedChainIds } from '../blockchain/chains';
 import { getTokenBalance, getEthBalance } from '../blockchain/rpc';
 import { createLogger } from '../utils/logger';
 import { retry } from '../utils/helpers';
-import { TIMEOUTS, CACHE_TTL } from '../config/constants';
+import { TIMEOUTS, CACHE_TTL, RETRY_CONFIG } from '../config/constants';
 
 const logger = createLogger('portfolio');
 
 import { cacheGet, cacheSet } from '../lib/safeCache';
+
+// ============================================
+// MORALIS API ERROR TYPES
+// ============================================
+interface MoralisErrorResponse {
+  message?: string;
+  code?: string;
+  statusCode?: number;
+}
+
+interface MoralisTokenResponse {
+  result: any[];
+  cursor?: string | null;
+  page?: number;
+  page_size?: number;
+}
+
+// ============================================
+// DEXSCREENER TYPES
+// ============================================
+interface DexScreenerPair {
+  priceUsd?: string;
+  liquidity?: { usd?: number };
+  volume?: { h24?: number };
+}
+
+interface DexScreenerResponse {
+  pairs?: DexScreenerPair[];
+}
 
 export interface TokenHolding {
   chainId: number;
@@ -27,11 +63,156 @@ export interface TokenHolding {
   logoUrl?: string;
   liquidityUsd?: number;
   volume24hUsd?: number;
+  priceSource?: 'moralis' | 'dexscreener' | 'coingecko' | 'fallback';
+}
+
+// ============================================
+// DEXSCREENER PRICE FALLBACK
+// ============================================
+
+/**
+ * Chain ID to DexScreener chain name mapping
+ */
+const DEXSCREENER_CHAIN_MAP: Record<number, string> = {
+  1: 'ethereum',
+  8453: 'base',
+  42161: 'arbitrum',
+  10: 'optimism',
+  137: 'polygon',
+  56: 'bsc',
+  43114: 'avalanche',
+  324: 'zksync',
+};
+
+/**
+ * Fetch token price from DexScreener as fallback when Moralis price is 0
+ * DexScreener is free and doesn't require an API key
+ */
+async function fetchPriceFromDexScreener(
+  chainId: number,
+  tokenAddress: string
+): Promise<{ priceUsd: number; liquidityUsd: number; volume24hUsd: number } | null> {
+  try {
+    const chain = DEXSCREENER_CHAIN_MAP[chainId];
+    if (!chain) {
+      logger.debug({ chainId }, 'Chain not supported by DexScreener');
+      return null;
+    }
+
+    // Check cache first
+    const cacheKey = `dexscreener:${chainId}:${tokenAddress.toLowerCase()}`;
+    const cached = await cacheGet<{ priceUsd: number; liquidityUsd: number; volume24hUsd: number }>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const response = await fetch(
+      `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`,
+      {
+        signal: AbortSignal.timeout(3000), // Quick timeout for price lookup
+        headers: {
+          'Accept': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      logger.debug({ chainId, tokenAddress, status: response.status }, 'DexScreener API error');
+      return null;
+    }
+
+    const data: DexScreenerResponse = await response.json();
+    
+    // Find the best pair (highest liquidity on our target chain)
+    const relevantPairs = (data.pairs || []).filter(
+      (pair: any) => pair.chainId?.toLowerCase() === chain.toLowerCase()
+    );
+    
+    if (relevantPairs.length === 0) {
+      // Try any chain if specific chain not found
+      if (data.pairs && data.pairs.length > 0) {
+        const bestPair = data.pairs.sort((a: any, b: any) => 
+          (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0)
+        )[0];
+        
+        const result = {
+          priceUsd: parseFloat(bestPair.priceUsd || '0'),
+          liquidityUsd: bestPair.liquidity?.usd || 0,
+          volume24hUsd: bestPair.volume?.h24 || 0,
+        };
+        
+        // Cache for 1 minute
+        await cacheSet(cacheKey, result, 60);
+        
+        logger.debug({ chainId, tokenAddress, price: result.priceUsd }, 'DexScreener price found (cross-chain)');
+        return result;
+      }
+      return null;
+    }
+
+    // Get best pair by liquidity
+    const bestPair = relevantPairs.sort((a: any, b: any) => 
+      (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0)
+    )[0];
+
+    const result = {
+      priceUsd: parseFloat(bestPair.priceUsd || '0'),
+      liquidityUsd: bestPair.liquidity?.usd || 0,
+      volume24hUsd: bestPair.volume?.h24 || 0,
+    };
+
+    // Cache for 1 minute
+    await cacheSet(cacheKey, result, 60);
+
+    logger.debug({ chainId, tokenAddress, price: result.priceUsd }, 'DexScreener price fetched');
+    return result;
+  } catch (error) {
+    logger.debug({ error, chainId, tokenAddress }, 'DexScreener fetch failed');
+    return null;
+  }
+}
+
+/**
+ * Batch fetch prices from DexScreener for multiple tokens
+ * More efficient than fetching one by one
+ */
+async function batchFetchPricesFromDexScreener(
+  tokens: { chainId: number; address: string }[]
+): Promise<Map<string, { priceUsd: number; liquidityUsd: number; volume24hUsd: number }>> {
+  const results = new Map<string, { priceUsd: number; liquidityUsd: number; volume24hUsd: number }>();
+  
+  // DexScreener allows up to 30 tokens per request
+  const BATCH_SIZE = 30;
+  const batches: { chainId: number; address: string }[][] = [];
+  
+  for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+    batches.push(tokens.slice(i, i + BATCH_SIZE));
+  }
+
+  for (const batch of batches) {
+    // Fetch in parallel for each batch
+    const promises = batch.map(async (token) => {
+      const key = `${token.chainId}:${token.address.toLowerCase()}`;
+      const price = await fetchPriceFromDexScreener(token.chainId, token.address);
+      if (price) {
+        results.set(key, price);
+      }
+    });
+    
+    await Promise.allSettled(promises);
+    
+    // Small delay between batches to be nice to the API
+    if (batches.length > 1) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
+  return results;
 }
 
 /**
  * Fetch token holdings via Moralis (EVM chains)
- * IMPROVED: Fetch ALL tokens including spam/dust with no minimum value filter
+ * IMPROVED: Full pagination, error handling, DexScreener price fallback
  */
 async function fetchTokensViaMoralis(
   walletAddress: string,
@@ -47,8 +228,7 @@ async function fetchTokensViaMoralis(
       137: 'polygon',
       56: 'bsc',
       43114: 'avalanche',
-      324: 'zksync', // zkSync Era
-      // 838592: Monad - not yet supported by Moralis, will use Alchemy fallback
+      324: 'zksync',
     };
 
     const chain = chainMap[chainId];
@@ -63,78 +243,128 @@ async function fetchTokensViaMoralis(
       return await fetchTokensViaAlchemy(walletAddress, chainId);
     }
 
-    // Fetch with exclude_spam=false to get ALL tokens including potential dust
-    // Also include token prices
-    const response = await fetch(
-      `${env.NEXT_PUBLIC_MORALIS_API_URL || 'https://deep-index.moralis.io/api/v2.2'}/${walletAddress}/erc20?chain=${chain}&exclude_spam=false&exclude_native=false`,
-      {
+    const baseUrl = env.NEXT_PUBLIC_MORALIS_API_URL || 'https://deep-index.moralis.io/api/v2.2';
+    const allResults: any[] = [];
+    let cursor: string | null = null;
+    let pageCount = 0;
+    const MAX_PAGES = 5; // Safety limit to prevent infinite loops
+
+    // Paginated fetching
+    do {
+      const url = new URL(`${baseUrl}/${walletAddress}/erc20`);
+      url.searchParams.set('chain', chain);
+      url.searchParams.set('exclude_spam', 'false');
+      url.searchParams.set('exclude_native', 'false');
+      if (cursor) {
+        url.searchParams.set('cursor', cursor);
+      }
+
+      logger.info({ chainId, pageCount, cursor: cursor?.slice(0, 20) || 'initial' }, 'Fetching Moralis page');
+
+      const response = await fetch(url.toString(), {
         headers: {
           'X-API-Key': env.MORALIS_API_KEY,
+          'Accept': 'application/json',
         },
         signal: AbortSignal.timeout(TIMEOUTS.API),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error({ chainId, status: response.status, error: errorText }, 'Moralis API error');
-      // Fall back to Alchemy on error
-      return await fetchTokensViaAlchemy(walletAddress, chainId);
-    }
-
-    const data = await response.json();
-    
-    logger.info({ 
-      chainId, 
-      rawResultCount: data.result?.length || 0,
-      cursor: data.cursor || 'none'
-    }, 'Moralis raw response');
-
-    const tokens: TokenHolding[] = (data.result || [])
-      .filter((token: any) => {
-        // Only filter out truly zero balance tokens
-        const balance = BigInt(token.balance || '0');
-        return balance > 0n;
-      })
-      .map((token: any) => {
-        const decimals = parseInt(token.decimals || '18');
-        const balance = BigInt(token.balance || '0');
-        const balanceFormatted = (Number(balance) / 10 ** decimals).toString();
-        const priceUsd = parseFloat(token.usd_price || '0');
-        // Calculate value - if no price, still include token with 0 value
-        const valueUsd = parseFloat(token.usd_value || '0') || (parseFloat(balanceFormatted) * priceUsd);
-
-        return {
-          chainId,
-          address: token.token_address,
-          symbol: token.symbol || 'UNKNOWN',
-          name: token.name || 'Unknown Token',
-          decimals,
-          balance: balance.toString(),
-          balanceFormatted,
-          priceUsd,
-          valueUsd,
-          logoUrl: token.logo || token.thumbnail,
-          liquidityUsd: 0,
-          volume24hUsd: 0,
-        };
       });
 
-    logger.info({ chainId, tokensFound: tokens.length, totalFromAPI: data.result?.length || 0 }, 'Moralis fetch success');
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error({ 
+          chainId, 
+          status: response.status, 
+          error: errorText.slice(0, 200),
+          apiKeyPrefix: env.MORALIS_API_KEY?.slice(0, 10)
+        }, 'Moralis API error');
+        
+        // On first page failure, try Alchemy
+        if (pageCount === 0) {
+          return await fetchTokensViaAlchemy(walletAddress, chainId);
+        }
+        break; // Use what we have
+      }
+
+      const data = await response.json();
+      
+      if (data.result && Array.isArray(data.result)) {
+        allResults.push(...data.result);
+      }
+      
+      cursor = data.cursor || null;
+      pageCount++;
+      
+      logger.info({ 
+        chainId, 
+        pageCount,
+        pageResults: data.result?.length || 0,
+        totalSoFar: allResults.length,
+        hasMore: !!cursor
+      }, 'Moralis page fetched');
+
+    } while (cursor && pageCount < MAX_PAGES);
+
+    logger.info({ 
+      chainId, 
+      totalResults: allResults.length,
+      pagesUsed: pageCount
+    }, 'Moralis pagination complete');
+
+    // Process tokens
+    const tokens: TokenHolding[] = [];
+    const tokensNeedingPrice: Array<{ token: TokenHolding; address: string }> = [];
     
-    // If Moralis returns very few tokens, also try Alchemy as supplement
+    for (const token of allResults) {
+      const balance = BigInt(token.balance || '0');
+      if (balance === 0n) continue;
+
+      const decimals = parseInt(token.decimals || '18');
+      const balanceFormatted = (Number(balance) / 10 ** decimals).toString();
+      const priceUsd = parseFloat(token.usd_price || '0');
+      const valueUsd = parseFloat(token.usd_value || '0') || (parseFloat(balanceFormatted) * priceUsd);
+
+      const holding: TokenHolding = {
+        chainId,
+        address: token.token_address,
+        symbol: token.symbol || 'UNKNOWN',
+        name: token.name || 'Unknown Token',
+        decimals,
+        balance: balance.toString(),
+        balanceFormatted,
+        priceUsd,
+        valueUsd,
+        logoUrl: token.logo || token.thumbnail,
+        liquidityUsd: 0,
+        volume24hUsd: 0,
+      };
+
+      tokens.push(holding);
+
+      // Track tokens without price for DexScreener fallback
+      if (priceUsd === 0 && parseFloat(balanceFormatted) > 0) {
+        tokensNeedingPrice.push({ token: holding, address: token.token_address });
+      }
+    }
+
+    // DexScreener price fallback for tokens without price
+    if (tokensNeedingPrice.length > 0 && tokensNeedingPrice.length <= 10) {
+      logger.info({ chainId, count: tokensNeedingPrice.length }, 'Fetching DexScreener prices');
+      await fetchDexScreenerPrices(tokensNeedingPrice, chainId);
+    }
+
+    logger.info({ chainId, tokensFound: tokens.length }, 'Moralis fetch complete');
+    
+    // Supplement with Alchemy if needed
     if (tokens.length < 3 && env.NEXT_PUBLIC_ALCHEMY_API_KEY) {
-      logger.info({ chainId }, 'Low token count from Moralis, supplementing with Alchemy');
+      logger.info({ chainId }, 'Low token count, supplementing with Alchemy');
       try {
         const alchemyTokens = await fetchTokensViaAlchemy(walletAddress, chainId);
-        // Merge tokens, avoiding duplicates
         const existingAddresses = new Set(tokens.map(t => t.address.toLowerCase()));
         for (const t of alchemyTokens) {
           if (!existingAddresses.has(t.address.toLowerCase())) {
             tokens.push(t);
           }
         }
-        logger.info({ chainId, afterMerge: tokens.length }, 'Merged Alchemy tokens');
       } catch (e) {
         // Ignore Alchemy errors
       }
@@ -144,6 +374,63 @@ async function fetchTokensViaMoralis(
   } catch (error) {
     logger.error({ error, walletAddress, chainId }, 'Moralis fetch failed, trying Alchemy');
     return await fetchTokensViaAlchemy(walletAddress, chainId);
+  }
+}
+
+/**
+ * Fetch prices from DexScreener for tokens without Moralis price
+ */
+async function fetchDexScreenerPrices(
+  tokensNeedingPrice: Array<{ token: TokenHolding; address: string }>,
+  chainId: number
+): Promise<void> {
+  try {
+    const chainNames: Record<number, string> = {
+      1: 'ethereum',
+      8453: 'base',
+      42161: 'arbitrum',
+      10: 'optimism',
+      137: 'polygon',
+      56: 'bsc',
+      43114: 'avalanche',
+      324: 'zksync',
+    };
+    
+    const chain = chainNames[chainId];
+    if (!chain) return;
+
+    // Batch addresses (DexScreener allows multiple)
+    const addresses = tokensNeedingPrice.map(t => t.address).join(',');
+    
+    const response = await fetch(
+      `https://api.dexscreener.com/latest/dex/tokens/${addresses}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+    
+    // Map results back to tokens
+    for (const pair of data.pairs || []) {
+      if (pair.chainId !== chain) continue;
+      
+      const tokenInfo = tokensNeedingPrice.find(
+        t => t.address.toLowerCase() === pair.baseToken?.address?.toLowerCase()
+      );
+      
+      if (tokenInfo && pair.priceUsd) {
+        const price = parseFloat(pair.priceUsd);
+        tokenInfo.token.priceUsd = price;
+        tokenInfo.token.valueUsd = parseFloat(tokenInfo.token.balanceFormatted) * price;
+        logger.debug({ 
+          symbol: tokenInfo.token.symbol, 
+          price 
+        }, 'DexScreener price applied');
+      }
+    }
+  } catch (error) {
+    logger.warn({ error }, 'DexScreener price fetch failed');
   }
 }
 
@@ -809,3 +1096,225 @@ export async function getTokenMetadata(
   }
 }
 
+// ============================================
+// API HEALTH CHECK
+// ============================================
+
+export interface ApiHealthCheckResult {
+  moralis: {
+    configured: boolean;
+    working: boolean;
+    error?: string;
+    latencyMs?: number;
+  };
+  alchemy: {
+    configured: boolean;
+    working: boolean;
+    error?: string;
+    latencyMs?: number;
+  };
+  dexscreener: {
+    configured: boolean; // Always true (no API key needed)
+    working: boolean;
+    error?: string;
+    latencyMs?: number;
+  };
+  coingecko: {
+    configured: boolean; // Always true (no API key needed for basic)
+    working: boolean;
+    error?: string;
+    latencyMs?: number;
+  };
+  overall: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: string;
+}
+
+/**
+ * Verify that API keys are valid and services are reachable
+ * This actually tests the APIs, not just checks if keys exist
+ */
+export async function checkApiHealth(): Promise<ApiHealthCheckResult> {
+  const results: ApiHealthCheckResult = {
+    moralis: { configured: false, working: false },
+    alchemy: { configured: false, working: false },
+    dexscreener: { configured: true, working: false }, // No API key needed
+    coingecko: { configured: true, working: false }, // No API key needed for basic
+    overall: 'unhealthy',
+    timestamp: new Date().toISOString(),
+  };
+
+  // Test Moralis API
+  if (env.MORALIS_API_KEY) {
+    results.moralis.configured = true;
+    const startTime = Date.now();
+    try {
+      // Use a known address to test the API (Vitalik's address)
+      const testAddress = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
+      const response = await fetch(
+        `${env.NEXT_PUBLIC_MORALIS_API_URL || 'https://deep-index.moralis.io/api/v2.2'}/${testAddress}/erc20?chain=eth&limit=1`,
+        {
+          headers: {
+            'X-API-Key': env.MORALIS_API_KEY,
+            'Accept': 'application/json',
+          },
+          signal: AbortSignal.timeout(5000),
+        }
+      );
+      
+      results.moralis.latencyMs = Date.now() - startTime;
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Verify we got a valid response structure
+        if (data && typeof data === 'object') {
+          results.moralis.working = true;
+        } else {
+          results.moralis.error = 'Invalid response format';
+        }
+      } else if (response.status === 401) {
+        results.moralis.error = 'API key invalid or expired';
+      } else if (response.status === 403) {
+        results.moralis.error = 'API key lacks required permissions';
+      } else if (response.status === 429) {
+        results.moralis.error = 'Rate limit exceeded';
+        results.moralis.working = true; // API is working, just rate limited
+      } else {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        results.moralis.error = `HTTP ${response.status}: ${errorText.slice(0, 100)}`;
+      }
+    } catch (error) {
+      results.moralis.latencyMs = Date.now() - startTime;
+      results.moralis.error = error instanceof Error ? error.message : 'Connection failed';
+    }
+  }
+
+  // Test Alchemy API
+  if (env.NEXT_PUBLIC_ALCHEMY_API_KEY) {
+    results.alchemy.configured = true;
+    const startTime = Date.now();
+    try {
+      const response = await fetch(
+        `https://eth-mainnet.g.alchemy.com/v2/${env.NEXT_PUBLIC_ALCHEMY_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'eth_blockNumber',
+            params: [],
+          }),
+          signal: AbortSignal.timeout(5000),
+        }
+      );
+      
+      results.alchemy.latencyMs = Date.now() - startTime;
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.result && !data.error) {
+          results.alchemy.working = true;
+        } else {
+          results.alchemy.error = data.error?.message || 'Invalid response';
+        }
+      } else {
+        results.alchemy.error = `HTTP ${response.status}`;
+      }
+    } catch (error) {
+      results.alchemy.latencyMs = Date.now() - startTime;
+      results.alchemy.error = error instanceof Error ? error.message : 'Connection failed';
+    }
+  }
+
+  // Test DexScreener API (no key needed)
+  {
+    const startTime = Date.now();
+    try {
+      // Test with WETH on Ethereum
+      const response = await fetch(
+        'https://api.dexscreener.com/latest/dex/tokens/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+        {
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(5000),
+        }
+      );
+      
+      results.dexscreener.latencyMs = Date.now() - startTime;
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.pairs && Array.isArray(data.pairs)) {
+          results.dexscreener.working = true;
+        } else {
+          results.dexscreener.error = 'Invalid response format';
+        }
+      } else {
+        results.dexscreener.error = `HTTP ${response.status}`;
+      }
+    } catch (error) {
+      results.dexscreener.latencyMs = Date.now() - startTime;
+      results.dexscreener.error = error instanceof Error ? error.message : 'Connection failed';
+    }
+  }
+
+  // Test CoinGecko API (no key needed for basic)
+  {
+    const startTime = Date.now();
+    try {
+      const response = await fetch(
+        'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
+        {
+          signal: AbortSignal.timeout(5000),
+        }
+      );
+      
+      results.coingecko.latencyMs = Date.now() - startTime;
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ethereum?.usd) {
+          results.coingecko.working = true;
+        } else {
+          results.coingecko.error = 'Invalid response format';
+        }
+      } else if (response.status === 429) {
+        results.coingecko.error = 'Rate limit exceeded';
+        results.coingecko.working = true; // API is working, just rate limited
+      } else {
+        results.coingecko.error = `HTTP ${response.status}`;
+      }
+    } catch (error) {
+      results.coingecko.latencyMs = Date.now() - startTime;
+      results.coingecko.error = error instanceof Error ? error.message : 'Connection failed';
+    }
+  }
+
+  // Determine overall health
+  const workingCount = [
+    results.moralis.working || !results.moralis.configured, // OK if not configured
+    results.alchemy.working || !results.alchemy.configured, // OK if not configured
+    results.dexscreener.working,
+    results.coingecko.working,
+  ].filter(Boolean).length;
+
+  // At least Moralis or Alchemy must be working for scanning
+  const hasScanCapability = results.moralis.working || results.alchemy.working;
+
+  if (hasScanCapability && workingCount >= 3) {
+    results.overall = 'healthy';
+  } else if (hasScanCapability) {
+    results.overall = 'degraded';
+  } else {
+    results.overall = 'unhealthy';
+  }
+
+  logger.info({
+    moralis: results.moralis.working,
+    alchemy: results.alchemy.working,
+    dexscreener: results.dexscreener.working,
+    coingecko: results.coingecko.working,
+    overall: results.overall,
+  }, 'API health check completed');
+
+  return results;
+}

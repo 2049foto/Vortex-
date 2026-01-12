@@ -323,8 +323,39 @@ export default function ConsolidateClient() {
       
     } catch (err: any) {
       console.error('[CONSOLIDATE] Error:', err);
-      setError(err?.message || 'Consolidation failed. Please try again.');
+      
+      // Parse error for user-friendly message
+      let userMessage = 'Consolidation failed. Please try again.';
+      let canRetry = true;
+      
+      if (err?.message) {
+        const msg = err.message.toLowerCase();
+        
+        if (msg.includes('no viable swap routes') || msg.includes('insufficient liquidity')) {
+          userMessage = 'No swap routes available. Some tokens may have low liquidity or require manual bridging.';
+          canRetry = false;
+        } else if (msg.includes('timeout')) {
+          userMessage = 'Request timed out. Please try again with fewer tokens.';
+          canRetry = true;
+        } else if (msg.includes('network') || msg.includes('fetch')) {
+          userMessage = 'Network error. Please check your connection and try again.';
+          canRetry = true;
+        } else if (msg.includes('gas') || msg.includes('insufficient funds')) {
+          userMessage = 'Insufficient gas or token balance. Please check your wallet.';
+          canRetry = false;
+        } else {
+          userMessage = err.message;
+          canRetry = true;
+        }
+      }
+      
+      setError(userMessage);
       setStep('error');
+      
+      // Store for retry
+      if (canRetry) {
+        (window as any).__lastConsolidateError = { error: err, canRetry };
+      }
     }
   };
 

@@ -247,10 +247,40 @@ export default function ScanClient() {
       
     } catch (error) {
       clearInterval(progressInterval);
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      setScanError(message);
+      
+      // Parse error message for user-friendly display
+      let userMessage = 'Unknown error occurred';
+      let canRetry = true;
+      
+      if (error instanceof Error) {
+        const msg = error.message.toLowerCase();
+        
+        if (msg.includes('timeout') || msg.includes('aborted')) {
+          userMessage = 'Scan timed out. The wallet may have many tokens. Please try again.';
+          canRetry = true;
+        } else if (msg.includes('network') || msg.includes('fetch')) {
+          userMessage = 'Network error. Please check your connection and try again.';
+          canRetry = true;
+        } else if (msg.includes('api key') || msg.includes('unauthorized')) {
+          userMessage = 'API configuration error. Please contact support.';
+          canRetry = false;
+        } else if (msg.includes('invalid address') || msg.includes('invalid')) {
+          userMessage = 'Invalid wallet address. Please check and try again.';
+          canRetry = true;
+        } else {
+          userMessage = error.message;
+          canRetry = true;
+        }
+      }
+      
+      setScanError(userMessage);
       setStep('input');
-      toastError('Scan Failed', message);
+      toastError('Scan Failed', userMessage);
+      
+      // Store error details for retry
+      if (canRetry) {
+        (window as any).__lastScanError = { error, canRetry };
+      }
     }
   }, [walletAddress, selectedChains, includeSolana, toastError, toastSuccess]);
 
@@ -612,6 +642,47 @@ export default function ScanClient() {
             Scan {selectedChains.size + (includeSolana ? 1 : 0)} Chains
             <ArrowRight className="w-6 h-6" />
           </motion.button>
+
+          {/* Error Display with Retry */}
+          {scanError && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-4 p-4 rounded-2xl"
+              style={{ 
+                background: 'hsl(var(--danger-light))', 
+                border: '1px solid hsl(var(--danger) / 0.3)' 
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" style={{ color: 'hsl(var(--danger))' }} />
+                <div className="flex-1">
+                  <div className="font-semibold text-sm mb-1" style={{ color: 'hsl(var(--danger))' }}>
+                    Scan Failed
+                  </div>
+                  <div className="text-sm mb-3" style={{ color: 'hsl(var(--text-secondary))' }}>
+                    {scanError}
+                  </div>
+                  {(window as any).__lastScanError?.canRetry && (
+                    <button
+                      onClick={() => {
+                        setScanError(null);
+                        handleScan();
+                      }}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+                      style={{ 
+                        background: 'hsl(var(--danger))', 
+                        color: 'white' 
+                      }}
+                    >
+                      <RefreshCw className="w-4 h-4 inline mr-2" />
+                      Retry Scan
+                    </button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* Features */}
           <motion.div

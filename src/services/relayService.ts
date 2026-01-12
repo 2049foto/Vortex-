@@ -52,14 +52,34 @@ export async function getRelayQuote(params: {
   destinationCurrency: string; // Token address or '0x0000000000000000000000000000000000000000' for native
   amount: string; // Amount in wei
   tradeType?: 'EXACT_INPUT' | 'EXACT_OUTPUT';
-}): Promise<RelayQuote> {
+}): Promise<RelayQuote | null> {
+  // Validate chain support
+  if (!isRelaySupported(params.originChainId, params.destinationChainId)) {
+    logger.warn({ 
+      originChainId: params.originChainId, 
+      destinationChainId: params.destinationChainId 
+    }, 'Relay does not support this chain pair');
+    return null;
+  }
+
+  // Validate amount
+  const amount = BigInt(params.amount);
+  if (amount <= 0n) {
+    logger.warn({ amount: params.amount }, 'Relay: Invalid amount');
+    return null;
+  }
+
+  // Normalize currency addresses
+  const originCurrency = toRelayCurrency(params.originCurrency);
+  const destinationCurrency = toRelayCurrency(params.destinationCurrency);
+
   try {
     logger.info({ 
       user: params.user.slice(0, 10),
       originChainId: params.originChainId,
       destinationChainId: params.destinationChainId,
-      originCurrency: params.originCurrency.slice(0, 10),
-      destinationCurrency: params.destinationCurrency.slice(0, 10),
+      originCurrency: originCurrency.slice(0, 10),
+      destinationCurrency: destinationCurrency.slice(0, 10),
       amount: params.amount.slice(0, 20),
     }, 'Getting Relay quote');
 
@@ -67,13 +87,14 @@ export async function getRelayQuote(params: {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({
         user: params.user,
         originChainId: params.originChainId,
         destinationChainId: params.destinationChainId,
-        originCurrency: params.originCurrency,
-        destinationCurrency: params.destinationCurrency,
+        originCurrency,
+        destinationCurrency,
         amount: params.amount,
         tradeType: params.tradeType || 'EXACT_INPUT',
       }),
@@ -82,39 +103,59 @@ export async function getRelayQuote(params: {
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error({ status: response.status, errorText }, 'Relay API error response');
-      throw new Error(`Relay API error: ${response.status} - ${errorText.slice(0, 200)}`);
+      logger.error({ 
+        status: response.status, 
+        errorText: errorText.slice(0, 300),
+        originChainId: params.originChainId,
+        destinationChainId: params.destinationChainId
+      }, 'Relay API error response');
+      return null;
     }
 
     const data = await response.json();
     
+    // Check for API errors in response body
+    if (data.error) {
+      logger.error({ 
+        error: data.error.message || data.error,
+        code: data.error.code 
+      }, 'Relay API returned error');
+      return null;
+    }
+
+    if (!data.requestId || !data.steps || data.steps.length === 0) {
+      logger.warn({ data }, 'Relay quote missing required fields');
+      return null;
+    }
+    
     logger.info({ 
       requestId: data.requestId, 
-      stepsCount: data.steps?.length,
+      stepsCount: data.steps.length,
       hasOutput: !!data.details?.currencyOut?.amountFormatted
     }, 'Relay quote received');
 
     // Extract estimated output from response
     const estimatedOutput = data.details?.currencyOut?.amountFormatted || 
                           data.details?.currencyOut?.amount || 
+                          data.destinationAmount ||
                           '0';
 
     return {
-      requestId: data.requestId || crypto.randomUUID(),
-      steps: data.steps || [],
+      requestId: data.requestId,
+      steps: data.steps,
       estimatedOutput,
       fees: {
-        relayFee: data.fees?.relayer?.amountFormatted || '0',
-        gasFee: data.fees?.gas?.amountFormatted || '0',
+        relayFee: data.fees?.relayer?.amountFormatted || data.relayFee?.toString() || '0',
+        gasFee: data.fees?.gas?.amountFormatted || data.gasFee?.toString() || '0',
       },
     };
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      logger.error({ params: params.originChainId }, 'Relay API timeout');
-      throw new Error('Relay API timeout');
+      logger.error({ originChainId: params.originChainId }, 'Relay API timeout');
+      return null;
     }
     logger.error({ error, originChain: params.originChainId }, 'Failed to get Relay quote');
-    throw error;
+    return null;
   }
 }
 

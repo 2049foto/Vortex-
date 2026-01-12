@@ -2144,6 +2144,196 @@ p { color: hsl(var(--text-secondary)); }
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE & FARCASTER OPTIMIZATIONS - January 2026
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Extra small screens (320px - Farcaster browser) */
+@media (max-width: 360px) {
+  .container {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  
+  h1 {
+    font-size: 22px;
+  }
+  
+  h2 {
+    font-size: 18px;
+  }
+  
+  .btn {
+    height: 44px;
+    padding: 0 16px;
+    font-size: 14px;
+  }
+  
+  .token-card {
+    padding: 8px 10px !important;
+  }
+}
+
+/* Touch-friendly targets for mobile */
+@media (pointer: coarse) {
+  /* Ensure all interactive elements are at least 44px */
+  .btn, 
+  .input, 
+  [role="button"],
+  button,
+  a[role="button"],
+  .chain-grid-item,
+  .token-card,
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Larger touch targets for small buttons */
+  .btn-sm {
+    min-height: 44px;
+    padding: 0 16px;
+  }
+  
+  /* Spacing for easier tapping */
+  .token-row,
+  .chain-grid-item {
+    margin-bottom: 8px;
+  }
+  
+  /* Remove hover effects on touch devices */
+  *:hover {
+    transform: none !important;
+  }
+}
+
+/* Farcaster/Warpcast browser optimizations */
+@media (max-width: 428px) {
+  /* Ensure content fits within Farcaster browser viewport */
+  .page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+  
+  /* Optimize modals for small screens */
+  .modal {
+    max-height: 90vh;
+    max-height: 90dvh;
+    margin: 5vh auto;
+    overflow-y: auto;
+  }
+  
+  /* Compact spacing */
+  .modal-body {
+    padding: 16px;
+  }
+  
+  /* Stack buttons vertically on small screens */
+  .modal-actions,
+  .action-group {
+    flex-direction: column;
+  }
+  
+  .modal-actions .btn,
+  .action-group .btn {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+  
+  .modal-actions .btn:last-child,
+  .action-group .btn:last-child {
+    margin-bottom: 0;
+  }
+}
+
+/* Portrait orientation optimizations */
+@media (orientation: portrait) and (max-width: 500px) {
+  /* Stack elements vertically */
+  .stats-grid,
+  .summary-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  /* Full-width buttons */
+  .btn-full {
+    width: 100%;
+  }
+}
+
+/* Landscape orientation (mobile) */
+@media (orientation: landscape) and (max-height: 500px) {
+  .page {
+    padding-top: 8px;
+    padding-bottom: 60px;
+  }
+  
+  .header {
+    padding: 8px 16px;
+  }
+  
+  h1 {
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+  
+  /* Compact cards */
+  .card {
+    padding: 12px;
+  }
+}
+
+/* High DPI screens (retina) */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .token-icon,
+  .chain-icon {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* Reduce animations on low-end devices */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Dark mode for mobile (if needed) */
+@media (prefers-color-scheme: dark) {
+  /* Additional dark mode adjustments for mobile */
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: env(safe-area-inset-top)) {
+  .page {
+    padding-top: max(16px, calc(env(safe-area-inset-top, 0px) + 8px));
+    padding-bottom: max(16px, calc(env(safe-area-inset-bottom, 0px) + 8px));
+  }
+  
+  .header {
+    padding-top: max(12px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(12px, calc(env(safe-area-inset-top, 0px) + 4px));
+  }
+  
+  .bottom-nav,
+  .bottom-action-bar {
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  }
+  
+  /* Modal safe areas */
+  .modal {
+    margin-top: max(20px, env(safe-area-inset-top, 0px));
+    margin-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  }
+}
+
 .chain-grid-item {
   display: flex;
   flex-direction: column;

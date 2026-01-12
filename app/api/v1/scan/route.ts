@@ -290,17 +290,90 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Health check endpoint
+// Health check endpoint - Verify all API keys
 export async function GET(request: NextRequest) {
+  const checks: Record<string, { configured: boolean; valid?: boolean; error?: string }> = {};
+  
+  // Check Moralis
+  const moralisKey = process.env.MORALIS_API_KEY;
+  checks.moralis = { configured: !!moralisKey };
+  if (moralisKey) {
+    try {
+      const res = await fetch('https://deep-index.moralis.io/api/v2.2/info/endpointWeights', {
+        headers: { 'X-API-Key': moralisKey },
+        signal: AbortSignal.timeout(5000),
+      });
+      checks.moralis.valid = res.ok;
+      if (!res.ok) checks.moralis.error = `Status ${res.status}`;
+    } catch (e) {
+      checks.moralis.valid = false;
+      checks.moralis.error = e instanceof Error ? e.message : 'Unknown';
+    }
+  }
+  
+  // Check Alchemy
+  const alchemyKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
+  checks.alchemy = { configured: !!alchemyKey };
+  if (alchemyKey) {
+    try {
+      const res = await fetch(`https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }),
+        signal: AbortSignal.timeout(5000),
+      });
+      checks.alchemy.valid = res.ok;
+    } catch (e) {
+      checks.alchemy.valid = false;
+      checks.alchemy.error = e instanceof Error ? e.message : 'Unknown';
+    }
+  }
+  
+  // Check 1inch
+  const oneInchKey = process.env.ONEINCH_API_KEY;
+  checks.oneInch = { configured: !!oneInchKey };
+  if (oneInchKey) {
+    try {
+      const res = await fetch('https://api.1inch.dev/swap/v6.0/8453/healthcheck', {
+        headers: { 
+          'Authorization': `Bearer ${oneInchKey}`,
+          'Accept': 'application/json'
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+      checks.oneInch.valid = res.ok;
+      if (!res.ok) checks.oneInch.error = `Status ${res.status}`;
+    } catch (e) {
+      checks.oneInch.valid = false;
+      checks.oneInch.error = e instanceof Error ? e.message : 'Unknown';
+    }
+  }
+  
+  // Check Pimlico
+  const pimlicoKey = process.env.PIMLICO_API_KEY;
+  checks.pimlico = { configured: !!pimlicoKey && !!process.env.NEXT_PUBLIC_PIMLICO_BASE_URL };
+  
+  // Check Redis
+  checks.redis = { 
+    configured: !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN 
+  };
+  
+  // Check Database
+  checks.database = { configured: !!process.env.DATABASE_URL };
+  
+  const allConfigured = Object.values(checks).every(c => c.configured);
+  const criticalValid = checks.moralis.valid !== false && checks.oneInch.valid !== false;
+
   return NextResponse.json({
-    status: 'ok',
-    service: 'scan-api',
+    status: allConfigured && criticalValid ? 'healthy' : 'degraded',
+    service: 'vortex-scan-api',
     timestamp: new Date().toISOString(),
-    env: {
-      hasMoralisKey: !!process.env.MORALIS_API_KEY,
-      hasAlchemyKey: !!process.env.NEXT_PUBLIC_ALCHEMY_API_KEY,
-      hasRedisUrl: !!process.env.UPSTASH_REDIS_REST_URL,
-      hasDatabaseUrl: !!process.env.DATABASE_URL,
+    version: '1.0.0',
+    checks,
+    summary: {
+      configured: Object.entries(checks).filter(([_, v]) => v.configured).map(([k]) => k),
+      missing: Object.entries(checks).filter(([_, v]) => !v.configured).map(([k]) => k),
+      invalid: Object.entries(checks).filter(([_, v]) => v.valid === false).map(([k]) => k),
     }
   });
 }

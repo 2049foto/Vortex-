@@ -81,6 +81,9 @@ export async function sponsorWithFallback(
   // Try Pimlico first
   try {
     const result = await sponsorWithPimlico(userOp, entryPoint);
+    if (!result) {
+      throw new Error('Pimlico returned null');
+    }
     return { result, paymaster: 'pimlico' };
   } catch (pimlicoError) {
     logger.warn(
